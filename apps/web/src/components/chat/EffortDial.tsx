@@ -95,7 +95,7 @@ export function EffortDial({
       <PopoverTrigger
         render={<Button variant="ghost" size="sm" disabled={disabled} />}
         aria-label={`Effort: ${EFFORT_PRESET_LABELS[preset]}`}
-        className="shrink-0 gap-1.5"
+        className="w-24 shrink-0 justify-start gap-1.5"
       >
         <GaugeIcon className="size-4" />
         {EFFORT_PRESET_LABELS[preset]}
@@ -251,7 +251,7 @@ export function EffortDial({
           ))}
         </div>
         <div className="mt-3 border-t px-1 pt-3" aria-live="polite">
-          <p className="text-xs text-muted-foreground">
+          <p className="h-12 overflow-y-auto text-xs wrap-anywhere text-muted-foreground">
             {resolution._tag === "Unavailable"
               ? resolution.reason
               : "Configure presets in Settings → General."}
