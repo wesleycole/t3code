@@ -2293,7 +2293,7 @@ describe("composerDraftStore setModelSelection", () => {
     resetComposerDraftStore();
   });
 
-  it("preserves preset identity when replacing a draft with an option-free snapshot", () => {
+  it("preserves specialist models and replaces them with an option-free preset snapshot", () => {
     const store = useComposerDraftStore.getState();
     store.setModelSelection(
       threadRef,
@@ -2302,9 +2302,31 @@ describe("composerDraftStore setModelSelection", () => {
         model: "gpt-6-astra",
         effortPreset: "ultra",
         options: [{ id: "reasoningEffort", value: "xhigh" }],
+        specialistModels: {
+          oracle: {
+            instanceId: CLAUDE_AGENT_INSTANCE,
+            model: "fable",
+            options: [{ id: "effort", value: "high" }],
+          },
+        },
       },
       { explicit: true, replaceOptions: true },
     );
+    expect(
+      draftFor(threadId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider[CODEX_INSTANCE],
+    ).toEqual({
+      instanceId: CODEX_INSTANCE,
+      model: "gpt-6-astra",
+      effortPreset: "ultra",
+      options: [{ id: "reasoningEffort", value: "xhigh" }],
+      specialistModels: {
+        oracle: {
+          instanceId: CLAUDE_AGENT_INSTANCE,
+          model: "fable",
+          options: [{ id: "effort", value: "high" }],
+        },
+      },
+    });
     store.setModelSelection(
       threadRef,
       {

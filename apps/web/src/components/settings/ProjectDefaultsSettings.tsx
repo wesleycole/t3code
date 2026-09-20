@@ -8,9 +8,10 @@ import {
   type ModelSelection,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
-import { resolveEffortPreset } from "@t3tools/shared/effortPresets";
+import { resolveEffortModel, resolveEffortPreset } from "@t3tools/shared/effortPresets";
 import { useNavigate } from "@tanstack/react-router";
 import * as Equal from "effect/Equal";
+import { useState } from "react";
 
 import { useT3ProjectFileState } from "../../hooks/useT3ProjectFileScripts";
 import { getCustomModelOptionsByInstance } from "../../modelSelection";
@@ -25,6 +26,8 @@ import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { runtimeModeConfig, runtimeModeOptions } from "../chat/runtimeModeConfig";
 import { PULL_REQUEST_MERGE_METHOD_LABELS } from "../pullRequest/pullRequestDetail.logic";
 import { TraitsPicker } from "../chat/TraitsPicker";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import type { ProjectSettingsCategory } from "./ProjectSettingsPanel";
@@ -49,6 +52,7 @@ export function EffortPresetsSettings() {
   const updateSettings = useUpdateScopedSettings();
   const navigate = useNavigate();
   const { scope, environment, connectedEnvironments } = useSettingsScope();
+  const [customSpecialists, setCustomSpecialists] = useState<ReadonlyArray<string>>([]);
   const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
   if (isProjectScope) return null;
 
@@ -64,6 +68,79 @@ export function EffortPresetsSettings() {
   const setPreset = (preset: EffortPreset, selection: ModelSelection) => {
     if (!canEdit) return;
     updateSettings({ effortPresets: { ...settings.effortPresets, [preset]: selection } });
+  };
+  const specialistNames = Array.from(
+    new Set([
+      "oracle",
+      "librarian",
+      "critic",
+      ...customSpecialists,
+      ...EFFORT_PRESETS.flatMap((preset) =>
+        Object.keys(settings.effortPresets[preset].specialistModels ?? {}),
+      ),
+    ]),
+  );
+
+  const modelControls = (
+    selection: ModelSelection | undefined,
+    label: string,
+    onChange: (selection: ModelSelection) => void,
+    specialistName?: string,
+  ) => {
+    const allowedEntries = specialistName
+      ? entries.filter(
+          (entry) => entry.driverKind === "codex" || entry.driverKind === "claudeAgent",
+        )
+      : entries;
+    const displayed = selection ?? settings.effortPresets.low;
+    const activeEntry = allowedEntries.find((entry) => entry.instanceId === displayed.instanceId);
+    return (
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+        <ProviderModelPicker
+          activeInstanceId={displayed.instanceId}
+          model={displayed.model}
+          lockedProvider={null}
+          instanceEntries={allowedEntries}
+          modelOptionsByInstance={getCustomModelOptionsByInstance(
+            settings,
+            providers,
+            displayed.instanceId,
+            displayed.model,
+          )}
+          triggerVariant="outline"
+          triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+          triggerAriaLabel={label}
+          {...(!selection ? { triggerLabel: "Definition default" } : {})}
+          onOpenProviderSetup={(instanceId) => {
+            if (environment)
+              void navigate({
+                to: "/settings/providers",
+                search: { environmentId: environment.environmentId, instanceId },
+              });
+          }}
+          onInstanceModelChange={(instanceId, model) =>
+            onChange(createModelSelection(instanceId, model))
+          }
+        />
+        {selection && activeEntry ? (
+          <TraitsPicker
+            provider={activeEntry.driverKind}
+            models={activeEntry.models}
+            model={selection.model}
+            prompt=""
+            onPromptChange={() => {}}
+            modelOptions={selection.options ?? []}
+            allowPromptInjectedEffort={false}
+            planModeEnabled={settings.planModeEnabled}
+            triggerVariant="outline"
+            triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+            onModelOptionsChange={(options) =>
+              onChange(createModelSelection(selection.instanceId, selection.model, options))
+            }
+          />
+        ) : null}
+      </div>
+    );
   };
 
   return (
@@ -132,70 +209,117 @@ export function EffortPresetsSettings() {
           />
           {EFFORT_PRESETS.map((preset) => {
             const selection = settings.effortPresets[preset];
-            const activeEntry = entries.find((entry) => entry.instanceId === selection.instanceId);
-            const modelOptions = getCustomModelOptionsByInstance(
-              settings,
-              providers,
-              selection.instanceId,
-              selection.model,
-            );
             const resolution = resolveEffortPreset(settings.effortPresets, preset, providers);
             return (
-              <SettingsRow
-                key={preset}
-                serverScoped
-                settingKeys={["effortPresets"]}
-                id={`effort-preset-${preset}`}
-                title={EFFORT_PRESET_LABELS[preset]}
-                description={`Provider, model, and options used for ${preset} effort.`}
-                status={resolution._tag === "Unavailable" ? resolution.reason : undefined}
-                control={
-                  <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
-                    <ProviderModelPicker
-                      activeInstanceId={selection.instanceId}
-                      model={selection.model}
-                      lockedProvider={null}
-                      instanceEntries={entries}
-                      modelOptionsByInstance={modelOptions}
-                      triggerVariant="outline"
-                      triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
-                      triggerAriaLabel={`${EFFORT_PRESET_LABELS[preset]} effort model`}
-                      onOpenProviderSetup={(instanceId) => {
-                        if (environment)
-                          void navigate({
-                            to: "/settings/providers",
-                            search: { environmentId: environment.environmentId, instanceId },
-                          });
-                      }}
-                      onInstanceModelChange={(instanceId, model) =>
-                        setPreset(preset, createModelSelection(instanceId, model))
-                      }
-                    />
-                    {activeEntry ? (
-                      <TraitsPicker
-                        provider={activeEntry.driverKind}
-                        models={activeEntry.models}
-                        model={selection.model}
-                        prompt=""
-                        onPromptChange={() => {}}
-                        modelOptions={selection.options ?? []}
-                        allowPromptInjectedEffort={false}
-                        planModeEnabled={settings.planModeEnabled}
-                        triggerVariant="outline"
-                        triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
-                        onModelOptionsChange={(options) =>
-                          setPreset(
-                            preset,
-                            createModelSelection(selection.instanceId, selection.model, options),
-                          )
+              <div key={preset}>
+                <SettingsRow
+                  serverScoped
+                  settingKeys={["effortPresets"]}
+                  id={`effort-preset-${preset}`}
+                  title={EFFORT_PRESET_LABELS[preset]}
+                  description={`Primary agent for ${preset} effort.`}
+                  status={resolution._tag === "Unavailable" ? resolution.reason : undefined}
+                  control={modelControls(
+                    selection,
+                    `${EFFORT_PRESET_LABELS[preset]} effort model`,
+                    (next) =>
+                      setPreset(preset, {
+                        ...next,
+                        ...(selection.specialistModels
+                          ? { specialistModels: selection.specialistModels }
+                          : {}),
+                      }),
+                  )}
+                />
+                <details className="px-4 py-3">
+                  <summary className="cursor-pointer rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+                    Specialists
+                  </summary>
+                  <p className="pt-3 text-xs text-muted-foreground">
+                    Override a specialist’s model for this effort. Otherwise its Markdown definition
+                    chooses the model. Saved conversations keep their overrides.
+                  </p>
+                  {specialistNames.map((name) => {
+                    const override = selection.specialistModels?.[name];
+                    const specialistResolution = override
+                      ? resolveEffortModel(override, providers)
+                      : null;
+                    return (
+                      <SettingsRow
+                        key={name}
+                        title={
+                          name === "oracle"
+                            ? "Oracle"
+                            : name === "librarian"
+                              ? "Librarian"
+                              : name === "critic"
+                                ? "Critic"
+                                : name
                         }
+                        status={
+                          specialistResolution?._tag === "Unavailable"
+                            ? specialistResolution.reason
+                            : undefined
+                        }
+                        resetAction={
+                          override ? (
+                            <SettingResetButton
+                              label={`${preset} ${name} model`}
+                              tooltip="Use the specialist definition’s model"
+                              onClick={() => {
+                                const specialistModels = { ...selection.specialistModels };
+                                delete specialistModels[name];
+                                setPreset(preset, { ...selection, specialistModels });
+                              }}
+                            />
+                          ) : null
+                        }
+                        control={modelControls(
+                          override,
+                          `${EFFORT_PRESET_LABELS[preset]} ${name} model`,
+                          (next) =>
+                            setPreset(preset, {
+                              ...selection,
+                              specialistModels: { ...selection.specialistModels, [name]: next },
+                            }),
+                          name,
+                        )}
                       />
-                    ) : null}
-                  </div>
-                }
-              />
+                    );
+                  })}
+                </details>
+              </div>
             );
           })}
+          <SettingsRow
+            title="Custom specialist"
+            description="Use the name from its .agents/specialists Markdown definition. This adds a model override, not a new specialist."
+            control={
+              <form
+                className="flex min-w-0 gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const name = new FormData(event.currentTarget).get("specialistName");
+                  if (typeof name !== "string" || !name.trim()) return;
+                  setCustomSpecialists((names) => [...names, name.trim()]);
+                  event.currentTarget.reset();
+                }}
+              >
+                <Input
+                  name="specialistName"
+                  aria-label="Specialist name"
+                  placeholder="Specialist name"
+                  required
+                  maxLength={53}
+                  pattern="[A-Za-z0-9][A-Za-z0-9_\-]*"
+                  className="min-w-0"
+                />
+                <Button type="submit" size="sm" variant="outline">
+                  Add
+                </Button>
+              </form>
+            }
+          />
         </>
       )}
     </SettingsSection>

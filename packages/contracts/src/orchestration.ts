@@ -77,6 +77,16 @@ const ModelSelectionWire = Schema.Struct({
   model: TrimmedNonEmptyString,
   options: Schema.optionalKey(ProviderOptionSelections),
   effortPreset: Schema.optionalKey(EffortPreset),
+  specialistModels: Schema.optionalKey(
+    Schema.Record(
+      Schema.String,
+      Schema.Struct({
+        instanceId: ProviderInstanceId,
+        model: TrimmedNonEmptyString,
+        options: Schema.optionalKey(ProviderOptionSelections),
+      }),
+    ),
+  ),
 });
 
 // Source shape for persisted legacy payloads. Fields are typed as
@@ -89,6 +99,7 @@ const ModelSelectionSource = Schema.Struct({
   model: Schema.Unknown,
   options: Schema.optional(Schema.Unknown),
   effortPreset: Schema.optional(Schema.Unknown),
+  specialistModels: Schema.optional(Schema.Unknown),
 });
 
 export const ModelSelection = ModelSelectionSource.pipe(
@@ -113,6 +124,7 @@ export const ModelSelection = ModelSelectionSource.pipe(
         };
         if (raw.options !== undefined) base.options = raw.options;
         if (raw.effortPreset !== undefined) base.effortPreset = raw.effortPreset;
+        if (raw.specialistModels !== undefined) base.specialistModels = raw.specialistModels;
         return Effect.succeed(base as typeof ModelSelectionWire.Encoded);
       },
       encode: (value) => {
@@ -122,6 +134,7 @@ export const ModelSelection = ModelSelectionSource.pipe(
         };
         if (value.options !== undefined) base.options = value.options;
         if (value.effortPreset !== undefined) base.effortPreset = value.effortPreset;
+        if (value.specialistModels !== undefined) base.specialistModels = value.specialistModels;
         return Effect.succeed(base as typeof ModelSelectionSource.Encoded);
       },
     }),
@@ -774,6 +787,17 @@ export const ThreadPullRequestLink = Schema.Struct({
 });
 export type ThreadPullRequestLink = typeof ThreadPullRequestLink.Type;
 
+/** Metadata assigning an ordinary child thread to a specialist role. */
+export const ThreadSpecialist = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  description: TrimmedNonEmptyString,
+  instructions: TrimmedNonEmptyString,
+  parentThreadId: ThreadId,
+  parentTurnId: Schema.NullOr(TurnId),
+});
+/** Metadata assigning an ordinary child thread to a specialist role. */
+export type ThreadSpecialist = typeof ThreadSpecialist.Type;
+
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
@@ -785,6 +809,7 @@ export const OrchestrationThread = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  specialist: Schema.optional(ThreadSpecialist),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   // Optional so payloads from pre-link servers still decode.
   pullRequests: Schema.Array(ThreadPullRequestLink).pipe(
@@ -872,6 +897,7 @@ export const OrchestrationThreadShell = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  specialist: Schema.optional(ThreadSpecialist),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   pullRequests: Schema.Array(ThreadPullRequestLink).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
@@ -1108,6 +1134,7 @@ const ThreadCreateCommand = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  specialist: Schema.optional(ThreadSpecialist),
   createdAt: IsoDateTime,
   historyImport: Schema.optional(Schema.Literal(true)),
 });
@@ -1740,6 +1767,8 @@ export const ThreadCreatedPayload = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  // Optional so events written before specialist threads were introduced still decode.
+  specialist: Schema.optional(ThreadSpecialist),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });

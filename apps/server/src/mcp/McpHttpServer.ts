@@ -5,14 +5,21 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as LayerMap from "effect/LayerMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
 import { McpProtocol, McpSchema, McpServer, Tool } from "effect/unstable/ai";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import {
+  HttpRouter,
+  HttpServerRequest,
+  HttpServerResponse,
+  type HttpServerError,
+} from "effect/unstable/http";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
@@ -20,6 +27,8 @@ import * as DeviceService from "../device/DeviceService.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import * as McpSessionRegistry from "./McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "./PreviewAutomationBroker.ts";
+import { specialistToolsLayer } from "../specialists/mcp.ts";
+import { SpecialistService } from "../specialists/SpecialistService.ts";
 import {
   PreviewSnapshotToolkitHandlersLive,
   PreviewStandardToolkitHandlersLive,
@@ -55,20 +64,6 @@ const unauthorized = HttpServerResponse.jsonUnsafe(
   },
 );
 
-type AuthenticatedHttpEffect = Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  Types.unhandled,
-  McpInvocationContext.McpInvocationContext
->;
-
-type McpAuthMiddleware = (
-  httpEffect: AuthenticatedHttpEffect,
-) => Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  Types.unhandled,
-  HttpServerRequest.HttpServerRequest
->;
-
 export const normalizeMcpHttpResponse = (
   response: HttpServerResponse.HttpServerResponse,
 ): HttpServerResponse.HttpServerResponse => {
@@ -80,38 +75,6 @@ export const normalizeMcpHttpResponse = (
     ? HttpServerResponse.setStatus(response, 202)
     : response;
 };
-
-const makeMcpAuthMiddleware = McpSessionRegistry.McpSessionRegistry.pipe(
-  Effect.map((registry): McpAuthMiddleware =>
-    Effect.fn("McpHttpServer.authenticateRequest")(function* (httpEffect) {
-      const request = yield* HttpServerRequest.HttpServerRequest;
-      const authorization = request.headers.authorization;
-      const token =
-        authorization?.startsWith("Bearer ") === true
-          ? authorization.slice("Bearer ".length).trim()
-          : "";
-      const invocation = yield* registry.resolve(token);
-      if (!invocation) {
-        // Without this the only symptom of a dead credential is the agent
-        // quietly losing the whole `t3-code` toolkit for the rest of its
-        // session, with nothing on the server to explain why.
-        yield* Effect.logWarning("rejected MCP request with an unusable credential", {
-          reason: token.length === 0 ? "missing_bearer_token" : "unknown_or_expired_token",
-        });
-        return unauthorized;
-      }
-      return yield* httpEffect.pipe(
-        Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
-        Effect.map(normalizeMcpHttpResponse),
-      );
-    }),
-  ),
-  Effect.withSpan("McpHttpServer.makeAuthMiddleware"),
-);
-
-const McpAuthMiddlewareLive = HttpRouter.middleware<{
-  provides: McpInvocationContext.McpInvocationContext;
-}>()(makeMcpAuthMiddleware).layer;
 
 /**
  * Claude Code drops every MCP result above 25k tokens (~100 KB of text) and
@@ -621,15 +584,70 @@ export const DeviceToolkitRegistrationLive = Layer.mergeAll(
   DeviceScreenshotRegistrationLive,
 );
 
-const McpTransportLive = McpServer.layerHttp({
-  name: "T3 Code",
-  version: packageJson.version,
-  path: "/mcp",
-  protocols: [McpProtocol.v2025_06_18],
-}).pipe(Layer.provide(McpAuthMiddlewareLive));
+class SessionMcpApp extends Context.Service<
+  SessionMcpApp,
+  {
+    readonly handle: Effect.Effect<
+      HttpServerResponse.HttpServerResponse,
+      HttpServerError.HttpServerError | Types.unhandled,
+      HttpServerRequest.HttpServerRequest | Scope.Scope
+    >;
+  }
+>()("t3/mcp/McpHttpServer/SessionMcpApp") {}
 
-export const layer = Layer.mergeAll(
-  PreviewToolkitRegistrationLive,
-  PullRequestsToolkitRegistrationLive,
-  DeviceToolkitRegistrationLive,
-).pipe(Layer.provideMerge(McpTransportLive));
+/** Each credential owns its catalog, so identically named specialists in different projects never collide. */
+export const layer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const registry = yield* McpSessionRegistry.McpSessionRegistry;
+    const apps = yield* LayerMap.make(
+      (invocation: McpInvocationContext.McpInvocationScope) =>
+        Layer.effect(
+          SessionMcpApp,
+          Effect.gen(function* () {
+            const handle = yield* HttpRouter.toHttpEffect(
+              Layer.mergeAll(
+                PreviewToolkitRegistrationLive,
+                PullRequestsToolkitRegistrationLive,
+                DeviceToolkitRegistrationLive,
+                specialistToolsLayer(invocation.threadId),
+              ).pipe(
+                Layer.provide(
+                  McpServer.layerHttp({
+                    name: "T3 Code",
+                    version: packageJson.version,
+                    path: "/mcp",
+                    protocols: [McpProtocol.v2025_06_18],
+                  }),
+                ),
+              ),
+            ).pipe(
+              // A session router must not reuse the application's HttpRouter layer.
+              // Keep the surrounding services, but give this nested build its own cache.
+              Effect.provideService(Layer.CurrentMemoMap, Layer.makeMemoMapUnsafe()),
+            );
+            return SessionMcpApp.of({
+              handle: handle.pipe(
+                Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
+                Effect.map(normalizeMcpHttpResponse),
+              ),
+            });
+          }),
+        ),
+      { idleTimeToLive: "1 hour" },
+    );
+    const router = yield* HttpRouter.HttpRouter;
+    yield* router.add(
+      "*",
+      "/mcp",
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const authorization = request.headers.authorization;
+        const token = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+        const invocation = yield* registry.resolve(token);
+        if (!invocation) return unauthorized;
+        const context = yield* apps.contextEffect(invocation);
+        return yield* Context.get(context, SessionMcpApp).handle;
+      }),
+    );
+  }),
+).pipe(Layer.provide(SpecialistService.layer));

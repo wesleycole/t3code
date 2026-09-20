@@ -3420,7 +3420,10 @@ export default function LegacySidebar() {
   }, []);
 
   const visibleThreads = useMemo(
-    () => sidebarThreads.filter((thread) => thread.archivedAt === null),
+    () =>
+      sidebarThreads.filter(
+        (thread) => thread.archivedAt === null && thread.specialist === undefined,
+      ),
     [sidebarThreads],
   );
   const sortedProjects = useMemo(() => {

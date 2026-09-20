@@ -35,7 +35,7 @@ import {
   projectScriptRuntimeEnv,
   resolveProjectScripts,
 } from "@t3tools/shared/projectScripts";
-import { Alert, Platform, ScrollView, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useWorkspaceState } from "../../state/workspace";
 import { useEnvironmentShellState } from "../../state/shell";
@@ -91,6 +91,10 @@ import {
   type ThreadInspectorMode,
 } from "./thread-inspector-content-stack";
 import { threadRouteIsHydrating } from "./thread-route-hydration";
+import { useThreadShells } from "../../state/entities";
+import { AppText as Text } from "../../components/AppText";
+import { StatusPill } from "../../components/StatusPill";
+import { resolveThreadStatus } from "./threadPresentation";
 
 function ThreadHeader(
   props: Parameters<typeof useThreadHeaderOptions>[0] & {
@@ -357,6 +361,7 @@ function ThreadRouteContent(
   const requests = useSelectedThreadRequests();
   const interruptThreadTurn = useAtomCommand(threadEnvironment.interruptTurn, "thread interrupt");
   const navigation = useNavigation();
+  const threadShells = useThreadShells();
   const params = props.route.params;
   const environmentIdRaw = firstRouteParam(params.environmentId);
   const environmentId = environmentIdRaw ? EnvironmentId.make(environmentIdRaw) : null;
@@ -436,6 +441,29 @@ function ThreadRouteContent(
           }
         : null,
     [composer.interactionMode, composer.modelSelection, composer.runtimeMode, selectedThread],
+  );
+  const specialistParent = selectedThread?.specialist
+    ? (threadShells.find(
+        (thread) =>
+          thread.environmentId === selectedThread.environmentId &&
+          thread.id === selectedThread.specialist?.parentThreadId,
+      ) ?? null)
+    : null;
+  const specialistChildren = selectedThread?.specialist
+    ? []
+    : threadShells.filter(
+        (thread) =>
+          thread.environmentId === selectedThread?.environmentId &&
+          thread.specialist?.parentThreadId === selectedThread?.id,
+      );
+  const openRelatedThread = useCallback(
+    (thread: (typeof threadShells)[number]) => {
+      navigation.navigate("Thread", {
+        environmentId: String(thread.environmentId),
+        threadId: String(thread.id),
+      });
+    },
+    [navigation],
   );
 
   /* ─── Native header theming ──────────────────────────────────────── */
@@ -1058,6 +1086,57 @@ function ThreadRouteContent(
         onOpenFilesInspector={handleOpenFilesInspector}
         onReturnToThread={props.onReturnToThread}
       />
+
+      {selectedThread.specialist ? (
+        <View className="flex-row items-center gap-2 border-b border-border bg-surface-subtle px-4 py-2">
+          <Text className="shrink font-t3-bold text-xs" numberOfLines={1}>
+            {selectedThread.specialist.name}
+          </Text>
+          {specialistParent ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Open parent conversation ${specialistParent.title}`}
+              className="min-w-0 flex-1 active:opacity-60"
+              onPress={() => openRelatedThread(specialistParent)}
+            >
+              <Text className="text-muted-foreground text-xs" numberOfLines={1}>
+                Parent: {specialistParent.title} →
+              </Text>
+            </Pressable>
+          ) : (
+            <Text className="text-muted-foreground text-xs">Parent conversation unavailable</Text>
+          )}
+        </View>
+      ) : specialistChildren.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          className="max-h-10 border-b border-border bg-surface-subtle"
+          contentContainerClassName="items-center gap-2 px-4 py-1.5"
+        >
+          <Text className="font-t3-bold text-xs">Specialists</Text>
+          {specialistChildren.map((child) => {
+            const status = resolveThreadStatus(child);
+            return (
+              <Pressable
+                key={String(child.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open specialist ${child.title}`}
+                className="flex-row items-center gap-1.5 rounded-md bg-surface px-2 py-1 active:opacity-60"
+                onPress={() => openRelatedThread(child)}
+              >
+                <Text className="max-w-40 text-xs" numberOfLines={1}>
+                  {child.title}
+                </Text>
+                <Text className="text-muted-foreground max-w-28 text-2xs" numberOfLines={1}>
+                  {child.modelSelection.model}
+                </Text>
+                {status ? <StatusPill {...status} size="compact" /> : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
 
       {renderThreadRouteBody()}
     </>

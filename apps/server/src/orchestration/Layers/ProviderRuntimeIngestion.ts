@@ -12,6 +12,7 @@ import {
   type ThreadTokenUsageSnapshot,
   TurnId,
   type OrchestrationCheckpointSummary,
+  type OrchestrationSession,
   type OrchestrationThreadActivity,
   type ProjectId,
   type ProviderRequestKind,
@@ -1839,6 +1840,18 @@ const make = Effect.gen(function* () {
         event.type === "turn.started" && shouldApplyThreadLifecycle
           ? yield* getSourceProposedPlanReferenceForAcceptedTurnStart(thread.id, eventTurnId)
           : null;
+      const publishThreadSession = (session: OrchestrationSession) =>
+        Effect.gen(function* () {
+          yield* orchestrationEngine.dispatch({
+            type: "thread.session.set",
+            commandId: yield* providerCommandId(event, "thread-session-set"),
+            threadId: thread.id,
+            session,
+            createdAt: now,
+          });
+        });
+      let terminalSessionPublication: ReturnType<typeof publishThreadSession> | typeof Effect.void =
+        Effect.void;
 
       if (
         event.type === "session.started" ||
@@ -1893,31 +1906,28 @@ const make = Effect.gen(function* () {
                 : (thread.session?.lastError ?? null);
 
         if (shouldApplyThreadLifecycle) {
-          if (event.type === "turn.started" && acceptedTurnStartedSourcePlan !== null) {
-            yield* markSourceProposedPlanImplemented(
-              acceptedTurnStartedSourcePlan.sourceThreadId,
-              acceptedTurnStartedSourcePlan.sourcePlanId,
-              thread.id,
-              now,
-            ).pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning(
-                  "provider runtime ingestion failed to mark source proposed plan",
-                  {
-                    eventId: event.eventId,
-                    eventType: event.type,
-                    cause: Cause.pretty(cause),
-                  },
+          const publishSession = Effect.gen(function* () {
+            if (event.type === "turn.started" && acceptedTurnStartedSourcePlan !== null) {
+              yield* markSourceProposedPlanImplemented(
+                acceptedTurnStartedSourcePlan.sourceThreadId,
+                acceptedTurnStartedSourcePlan.sourcePlanId,
+                thread.id,
+                now,
+              ).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning(
+                    "provider runtime ingestion failed to mark source proposed plan",
+                    {
+                      eventId: event.eventId,
+                      eventType: event.type,
+                      cause: Cause.pretty(cause),
+                    },
+                  ),
                 ),
-              ),
-            );
-          }
+              );
+            }
 
-          yield* orchestrationEngine.dispatch({
-            type: "thread.session.set",
-            commandId: yield* providerCommandId(event, "thread-session-set"),
-            threadId: thread.id,
-            session: {
+            yield* publishThreadSession({
               threadId: thread.id,
               status,
               providerName: event.provider,
@@ -1928,9 +1938,13 @@ const make = Effect.gen(function* () {
               activeTurnId: nextActiveTurnId,
               lastError,
               updatedAt: now,
-            },
-            createdAt: now,
+            });
           });
+          if (isTerminalTurn) {
+            terminalSessionPublication = publishSession;
+          } else {
+            yield* publishSession;
+          }
         }
       }
 
@@ -2399,6 +2413,7 @@ const make = Effect.gen(function* () {
             updatedAt: now,
           });
         }
+        yield* terminalSessionPublication;
       }
 
       if (event.type === "session.exited") {

@@ -154,6 +154,35 @@ function makeThreadOpenResponse(
 }
 
 describe("buildTurnStartParams", () => {
+  it.effect("adds specialist instructions without replacing mode instructions", () =>
+    Effect.gen(function* () {
+      const params = yield* buildTurnStartParams({
+        threadId: "provider-thread-1",
+        runtimeMode: "full-access",
+        prompt: "Review this change",
+        interactionMode: "plan",
+        specialistInstructions: "Focus exclusively on database correctness.",
+      });
+
+      NodeAssert.equal(
+        params.collaborationMode?.settings.developer_instructions,
+        `${buildCodexDeveloperInstructions("plan", { model: DEFAULT_MODEL, reasoningEffort: "medium" }, true)}\n\nFocus exclusively on database correctness.`,
+      );
+
+      const defaultParams = yield* buildTurnStartParams({
+        threadId: "provider-thread-1",
+        runtimeMode: "full-access",
+        prompt: "Continue",
+        specialistInstructions: "Focus exclusively on database correctness.",
+      });
+      NodeAssert.equal(defaultParams.collaborationMode?.mode, "default");
+      NodeAssert.match(
+        defaultParams.collaborationMode?.settings.developer_instructions ?? "",
+        /Focus exclusively on database correctness\.$/u,
+      );
+    }),
+  );
+
   it.effect("sends currency skill aliases in Codex's canonical dollar form", () =>
     Effect.gen(function* () {
       for (const symbol of ["€", "£", "¥", "₹", "₩", "₿", "𑿝"]) {
@@ -889,6 +918,59 @@ describe("isRecoverableThreadResumeError", () => {
 });
 
 describe("openCodexThread", () => {
+  it.effect("sends specialist instructions when starting and resuming threads", () =>
+    Effect.gen(function* () {
+      const calls: Array<{
+        readonly method: string;
+        readonly payload:
+          | CodexRpc.ClientRequestParamsByMethod["thread/start"]
+          | CodexRpc.ClientRequestParamsByMethod["thread/resume"];
+      }> = [];
+      const response = makeThreadOpenResponse("provider-thread");
+      const client = {
+        request: (
+          method: "thread/start",
+          payload: CodexRpc.ClientRequestParamsByMethod["thread/start"],
+        ) =>
+          Effect.sync(() => {
+            calls.push({ method, payload });
+            return response;
+          }),
+        raw: {
+          request: (
+            method: "thread/resume",
+            payload: CodexRpc.ClientRequestParamsByMethod["thread/resume"],
+          ) =>
+            Effect.sync(() => {
+              calls.push({ method, payload });
+              return response;
+            }),
+        },
+      };
+      const base = {
+        client,
+        threadId: ThreadId.make("thread-specialist"),
+        runtimeMode: "full-access" as const,
+        cwd: "/tmp/project",
+        requestedModel: undefined,
+        serviceTier: undefined,
+        specialistInstructions: "Investigate only the assigned subsystem.",
+      };
+
+      yield* openCodexThread({ ...base, resumeThreadId: undefined });
+      yield* openCodexThread({ ...base, resumeThreadId: "saved-thread" });
+
+      NodeAssert.equal(
+        calls[0]?.payload.developerInstructions,
+        "Investigate only the assigned subsystem.",
+      );
+      NodeAssert.equal(
+        calls[1]?.payload.developerInstructions,
+        "Investigate only the assigned subsystem.",
+      );
+    }),
+  );
+
   it.effect("resumes metadata when historical turns contain unknown error values", () =>
     Effect.gen(function* () {
       const response = makeThreadOpenResponse("saved-thread");

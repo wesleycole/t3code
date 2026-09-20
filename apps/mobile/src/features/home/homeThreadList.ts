@@ -279,6 +279,11 @@ export function buildHomeThreadGroups(input: {
     if (thread.archivedAt !== null) {
       continue;
     }
+    // Specialist children stay reachable through their parent and search, but
+    // do not compete with user-created conversations in the default inbox.
+    if (thread.specialist !== undefined && input.searchQuery.trim().length === 0) {
+      continue;
+    }
     if (input.environmentId !== null && thread.environmentId !== input.environmentId) {
       continue;
     }

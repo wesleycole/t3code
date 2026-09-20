@@ -30,6 +30,7 @@ import {
   ModelSelection,
   ProjectId,
   ThreadLinkedPullRequest,
+  ThreadSpecialist,
   ThreadTitleState,
   ThreadId,
   ThreadPullRequestSnapshot,
@@ -132,6 +133,7 @@ const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
     titleState: Schema.NullOr(Schema.fromJsonString(ThreadTitleState)),
     linkedPullRequest: Schema.NullOr(Schema.fromJsonString(ThreadLinkedPullRequest)),
     branchPullRequest: Schema.NullOr(Schema.fromJsonString(ThreadLinkedPullRequest)),
+    specialist: Schema.optional(Schema.NullOr(Schema.fromJsonString(ThreadSpecialist))),
   }),
 );
 const ProjectionThreadActivityDbRowSchema = ProjectionThreadActivity.mapFields(
@@ -573,6 +575,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          specialist_json AS "specialist",
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
           latest_turn_id AS "latestTurnId",
@@ -614,6 +617,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          specialist_json AS "specialist",
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
           latest_turn_id AS "latestTurnId",
@@ -659,6 +663,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       FROM projection_threads t
       JOIN projection_projects p ON p.project_id = t.project_id
       WHERE t.deleted_at IS NOT NULL AND t.worktree_path IS NOT NULL AND t.branch IS NOT NULL
+        AND t.specialist_json IS NULL
       ORDER BY t.deleted_at DESC, t.thread_id ASC
     `,
   });
@@ -687,6 +692,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          specialist_json AS "specialist",
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
           latest_turn_id AS "latestTurnId",
@@ -1252,6 +1258,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          specialist_json AS "specialist",
           linked_pull_request_json AS "linkedPullRequest",
           branch_pull_request_json AS "branchPullRequest",
           latest_turn_id AS "latestTurnId",
@@ -2323,6 +2330,7 @@ pending_approval_requests AS (
                 interactionMode: row.interactionMode,
                 branch: row.branch,
                 worktreePath: row.worktreePath,
+                ...(row.specialist == null ? {} : { specialist: row.specialist }),
                 ...mapThreadPullRequests(
                   pullRequestsByThread.get(row.threadId) ?? [],
                   row.projectId,
@@ -2568,6 +2576,7 @@ pending_approval_requests AS (
                   interactionMode: row.interactionMode,
                   branch: row.branch,
                   worktreePath: row.worktreePath,
+                  ...(row.specialist == null ? {} : { specialist: row.specialist }),
                   ...mapThreadPullRequests(
                     pullRequestsByThread.get(row.threadId) ?? [],
                     row.projectId,
@@ -2724,6 +2733,7 @@ pending_approval_requests AS (
                         interactionMode: row.interactionMode,
                         branch: row.branch,
                         worktreePath: row.worktreePath,
+                        ...(row.specialist == null ? {} : { specialist: row.specialist }),
                         branchPullRequest: row.branchPullRequest,
                         ...mapThreadPullRequests(
                           pullRequestsByThread.get(row.threadId) ?? [],
@@ -2887,6 +2897,7 @@ pending_approval_requests AS (
                   interactionMode: row.interactionMode,
                   branch: row.branch,
                   worktreePath: row.worktreePath,
+                  ...(row.specialist == null ? {} : { specialist: row.specialist }),
                   branchPullRequest: row.branchPullRequest,
                   ...mapThreadPullRequests(
                     pullRequestsByThread.get(row.threadId) ?? [],
@@ -3240,6 +3251,7 @@ pending_approval_requests AS (
         interactionMode: threadRow.value.interactionMode,
         branch: threadRow.value.branch,
         worktreePath: threadRow.value.worktreePath,
+        ...(threadRow.value.specialist == null ? {} : { specialist: threadRow.value.specialist }),
         ...mapThreadPullRequests(
           pullRequestRows.map(mapPullRequestRow),
           threadRow.value.projectId,
@@ -3541,6 +3553,7 @@ pending_approval_requests AS (
         interactionMode: threadRow.value.interactionMode,
         branch: threadRow.value.branch,
         worktreePath: threadRow.value.worktreePath,
+        ...(threadRow.value.specialist == null ? {} : { specialist: threadRow.value.specialist }),
         ...mapThreadPullRequests(
           pullRequestRows.map(mapPullRequestRow),
           threadRow.value.projectId,

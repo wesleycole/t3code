@@ -196,7 +196,9 @@ export const make = Effect.gen(function* () {
       (thread) => path.resolve(thread.worktreePath!),
     );
     const candidates = [
-      ...[...groups.values()].flatMap((group) => (group.length === 1 ? [group[0]!] : [])),
+      ...[...groups.values()].flatMap((group) =>
+        group.length === 1 && group[0]?.specialist === undefined ? group : [],
+      ),
       ...deletedThreads.filter((thread) => !groups.has(path.resolve(thread.worktreePath))),
     ];
     for (const thread of candidates) {

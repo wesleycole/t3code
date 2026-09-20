@@ -73,6 +73,37 @@ function buildGroups(
 }
 
 describe("buildHomeThreadGroups", () => {
+  it("hides specialist children from the default inbox but keeps them searchable", () => {
+    const environmentId = EnvironmentId.make("environment-local");
+    const projectId = ProjectId.make("project-local");
+    const parentThreadId = ThreadId.make("parent");
+    const child = makeThread({
+      environmentId,
+      id: ThreadId.make("child"),
+      projectId,
+      title: "Investigate mobile navigation",
+      specialist: {
+        name: "Mobile specialist",
+        description: "Checks native navigation",
+        instructions: "Review the mobile route",
+        parentThreadId,
+        parentTurnId: null,
+      },
+    });
+    const projects = [makeProject({ environmentId, id: projectId, title: "T3 Code" })];
+    const parent = makeThread({
+      environmentId,
+      id: parentThreadId,
+      projectId,
+      title: "Parent conversation",
+    });
+
+    expect(buildGroups(projects, [parent, child])[0]?.threads).toEqual([parent]);
+    expect(
+      buildGroups(projects, [parent, child], { searchQuery: "mobile navigation" })[0]?.threads,
+    ).toEqual([child]);
+  });
+
   it("builds one v2 scope for the same repository across environments", () => {
     const localEnvironmentId = EnvironmentId.make("environment-local");
     const remoteEnvironmentId = EnvironmentId.make("environment-remote");

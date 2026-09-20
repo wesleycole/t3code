@@ -482,6 +482,90 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.lastError).toBe("turn failed");
   });
 
+  it("persists buffered final output before publishing the terminal session state", async () => {
+    const harness = await createHarness({
+      serverSettings: { responseStreamingMode: "paragraph" },
+    });
+    const threadId = asThreadId("thread-1");
+    const turnId = asTurnId("turn-buffered-terminal-order");
+    const base = {
+      provider: ProviderDriverKind.make("codex"),
+      threadId,
+      turnId,
+      createdAt: "2026-01-01T00:00:01.000Z",
+    };
+
+    await harness.emitAndDrain([
+      { ...base, type: "turn.started", eventId: asEventId("buffered-order-started") },
+      {
+        ...base,
+        type: "content.delta",
+        eventId: asEventId("buffered-order-delta"),
+        itemId: asItemId("buffered-order-message"),
+        payload: { streamKind: "assistant_text", delta: "Final buffered answer." },
+      },
+      {
+        ...base,
+        type: "turn.completed",
+        eventId: asEventId("buffered-order-completed"),
+        payload: { state: "completed" },
+      },
+    ]);
+
+    const events = Array.from(
+      await Effect.runPromise(Stream.runCollect(harness.engine.readEvents(0))),
+    );
+    const finalMessageIndex = events.findLastIndex(
+      (event) =>
+        event.type === "thread.message-sent" &&
+        event.payload.messageId === "assistant:buffered-order-message" &&
+        event.payload.streaming === false,
+    );
+    const terminalSessionIndex = events.findLastIndex(
+      (event) =>
+        event.type === "thread.session-set" &&
+        event.payload.session.status === "ready" &&
+        event.payload.session.activeTurnId === null,
+    );
+    expect(finalMessageIndex).toBeGreaterThan(-1);
+    expect(terminalSessionIndex).toBeGreaterThan(finalMessageIndex);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "thread.message-sent" &&
+          event.payload.messageId === "assistant:buffered-order-message" &&
+          event.payload.text === "Final buffered answer.",
+      ),
+    ).toBe(true);
+  });
+
+  it("publishes terminal session state for a textless completion", async () => {
+    const harness = await createHarness();
+    const threadId = asThreadId("thread-1");
+    const turnId = asTurnId("turn-textless-completion");
+    const base = {
+      provider: ProviderDriverKind.make("codex"),
+      threadId,
+      turnId,
+      createdAt: "2026-01-01T00:00:01.000Z",
+    };
+
+    await harness.emitAndDrain([
+      { ...base, type: "turn.started", eventId: asEventId("textless-started") },
+      {
+        ...base,
+        type: "turn.completed",
+        eventId: asEventId("textless-completed"),
+        payload: { state: "completed" },
+      },
+    ]);
+
+    const thread = (await harness.readModel()).threads.find((entry) => entry.id === threadId);
+    expect(thread?.session).toMatchObject({ status: "ready", activeTurnId: null });
+    expect(thread?.latestTurn).toMatchObject({ turnId, state: "completed" });
+    expect(thread?.messages).toEqual([]);
+  });
+
   it.each([
     { delivery: "buffered", responseStreamingMode: "paragraph" as const },
     { delivery: "streamed", responseStreamingMode: "token" as const },

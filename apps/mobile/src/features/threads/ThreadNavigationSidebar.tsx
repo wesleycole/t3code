@@ -532,7 +532,11 @@ function ThreadNavigationSidebarPane(
       };
     return buildThreadListV2Items({
       pendingOrder,
-      threads: threads.filter((thread) => thread.archivedAt === null),
+      threads: threads.filter(
+        (thread) =>
+          thread.archivedAt === null &&
+          (props.searchQuery.trim().length > 0 || thread.specialist === undefined),
+      ),
       environmentId: options.selectedEnvironmentId,
       projectRefs: selectedProjectScope === null ? null : selectedProjectScope.projectRefs,
       searchQuery: props.searchQuery,

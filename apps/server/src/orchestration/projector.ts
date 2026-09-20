@@ -430,6 +430,7 @@ export function projectEvent(
             interactionMode: payload.interactionMode,
             branch: payload.branch,
             worktreePath: payload.worktreePath,
+            ...(payload.specialist !== undefined ? { specialist: payload.specialist } : {}),
             pullRequests: [],
             branchPullRequest: null,
             latestTurn: null,

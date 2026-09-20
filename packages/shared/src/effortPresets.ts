@@ -16,10 +16,9 @@ export type EffortPresetResolution =
   | { readonly _tag: "Available"; readonly selection: ModelSelection; readonly modelName: string }
   | { readonly _tag: "Unavailable"; readonly reason: string };
 
-/** Resolve a preset without fallback, capturing the model's advertised option defaults. */
-export function resolveEffortPreset(
-  presets: EffortPresets,
-  preset: EffortPreset,
+/** Resolve a configured model without fallback, capturing its advertised option defaults. */
+export function resolveEffortModel(
+  configured: ModelSelection,
   providers: ReadonlyArray<
     Pick<
       ServerProvider,
@@ -27,7 +26,6 @@ export function resolveEffortPreset(
     >
   >,
 ): EffortPresetResolution {
-  const configured = presets[preset];
   const provider = providers.find((entry) => entry.instanceId === configured.instanceId);
   if (
     !provider?.enabled ||
@@ -73,9 +71,33 @@ export function resolveEffortPreset(
   return {
     _tag: "Available",
     modelName: model.name,
+    selection: createModelSelection(configured.instanceId, configured.model, options),
+  };
+}
+
+/** Freeze the primary and specialist choices together when a conversation starts. */
+export function resolveEffortPreset(
+  presets: EffortPresets,
+  preset: EffortPreset,
+  providers: Parameters<typeof resolveEffortModel>[1],
+): EffortPresetResolution {
+  const configured = presets[preset];
+  const primary = resolveEffortModel(configured, providers);
+  if (primary._tag === "Unavailable") return primary;
+  const specialistModels = Object.fromEntries(
+    Object.entries(configured.specialistModels ?? {}).map(([name, selection]) => {
+      const resolution = resolveEffortModel(selection, providers);
+      // An optional specialist must not prevent the primary agent from starting.
+      // Retain unavailable choices; invocation reports the error without fallback.
+      return [name, resolution._tag === "Available" ? resolution.selection : selection];
+    }),
+  );
+  return {
+    ...primary,
     selection: {
-      ...createModelSelection(configured.instanceId, configured.model, options),
+      ...primary.selection,
       effortPreset: preset,
+      ...(Object.keys(specialistModels).length > 0 ? { specialistModels } : {}),
     },
   };
 }
@@ -84,10 +106,17 @@ export function resolveEffortPreset(
 export function sameEffortSelection(left: ModelSelection, right: ModelSelection): boolean {
   const leftOptions = left.options ?? [];
   const rightOptions = right.options ?? [];
+  const leftSpecialists = Object.entries(left.specialistModels ?? {});
+  const rightSpecialists = right.specialistModels ?? {};
   return (
     left.instanceId === right.instanceId &&
     left.model === right.model &&
     left.effortPreset === right.effortPreset &&
+    leftSpecialists.length === Object.keys(rightSpecialists).length &&
+    leftSpecialists.every(([name, selection]) => {
+      const candidate = Object.hasOwn(rightSpecialists, name) ? rightSpecialists[name] : undefined;
+      return candidate !== undefined && sameEffortSelection(selection, candidate);
+    }) &&
     leftOptions.length === rightOptions.length &&
     new Set(rightOptions.map((option) => option.id)).size === rightOptions.length &&
     new Set(leftOptions.map((option) => option.id)).size === leftOptions.length &&

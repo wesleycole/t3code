@@ -183,6 +183,7 @@ describe("ProviderCommandReactor", () => {
     readonly compactThreadEffect?: () => Effect.Effect<void, ProviderAdapterRequestError>;
     readonly interruptTurnEffect?: () => Effect.Effect<void, ProviderAdapterRequestError>;
     readonly stopSessionEffect?: () => Effect.Effect<void, ProviderAdapterRequestError>;
+    readonly specialist?: boolean;
     readonly startSessionEffect?: (
       session: ProviderSession,
     ) => Effect.Effect<ProviderSession, ProviderServiceError>;
@@ -514,6 +515,23 @@ describe("ProviderCommandReactor", () => {
       }),
     );
     await Effect.runPromise(
+      input?.specialist === true
+        ? engine.dispatch({
+            type: "thread.create",
+            commandId: CommandId.make("cmd-parent-thread-create"),
+            threadId: ThreadId.make("thread-parent"),
+            projectId: asProjectId("project-1"),
+            title: "Parent thread",
+            modelSelection,
+            interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+            runtimeMode: "approval-required",
+            branch: null,
+            worktreePath: null,
+            createdAt: now,
+          })
+        : Effect.void,
+    );
+    await Effect.runPromise(
       engine.dispatch({
         type: "thread.create",
         commandId: CommandId.make("cmd-thread-create"),
@@ -525,6 +543,17 @@ describe("ProviderCommandReactor", () => {
         runtimeMode: "approval-required",
         branch: null,
         worktreePath: null,
+        ...(input?.specialist === true
+          ? {
+              specialist: {
+                name: "reviewer",
+                description: "Reviews changes",
+                instructions: "Review the assigned change.",
+                parentThreadId: ThreadId.make("thread-parent"),
+                parentTurnId: null,
+              },
+            }
+          : {}),
         createdAt: now,
       }),
     );
@@ -2601,6 +2630,40 @@ describe("ProviderCommandReactor", () => {
         .find((entry) => entry.id === ThreadId.make("thread-1"))
         ?.messages.find((entry) => entry.id === asMessageId("user-message-branch-model"))?.text,
     ).toBe(prompt);
+  });
+
+  it("does not generate or rename a worktree branch for a specialist thread", async () => {
+    const harness = await createHarness({ specialist: true });
+    const createdAt = "2026-01-01T00:00:00.000Z";
+    await harness.runEffect(
+      harness.engine.dispatch({
+        type: "thread.meta.update",
+        commandId: CommandId.make("cmd-specialist-worktree"),
+        threadId: ThreadId.make("thread-1"),
+        branch: "t3code/1234abcd",
+        worktreePath: "/tmp/provider-project-worktree",
+      }),
+    );
+    await harness.runEffect(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-specialist-turn-start"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("specialist-message"),
+          role: "user",
+          text: "Review this change",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt,
+      }),
+    );
+    await harness.drain();
+
+    expect(harness.generateBranchName).not.toHaveBeenCalled();
+    expect(harness.renameBranch).not.toHaveBeenCalled();
   });
 
   it("recreates a missing worktree from the thread branch before starting a turn", async () => {

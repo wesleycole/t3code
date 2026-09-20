@@ -161,7 +161,9 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Effort presets",
     to: "/settings/general",
     scope: "environment-defaults",
-    searchTerms: ["new conversation default model provider reasoning dial low medium high ultra"],
+    searchTerms: [
+      "new conversation default model provider reasoning dial low medium high ultra specialist oracle librarian critic",
+    ],
   },
   {
     id: "default-effort-preset",
