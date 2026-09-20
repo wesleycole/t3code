@@ -11,7 +11,7 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { resolveEffortModel, resolveEffortPreset } from "@t3tools/shared/effortPresets";
 import { useNavigate } from "@tanstack/react-router";
 import * as Equal from "effect/Equal";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 
 import { useT3ProjectFileState } from "../../hooks/useT3ProjectFileScripts";
 import { getCustomModelOptionsByInstance } from "../../modelSelection";
@@ -211,7 +211,7 @@ export function EffortPresetsSettings() {
             const selection = settings.effortPresets[preset];
             const resolution = resolveEffortPreset(settings.effortPresets, preset, providers);
             return (
-              <Fragment key={preset}>
+              <div key={preset}>
                 <SettingsRow
                   serverScoped
                   settingKeys={["effortPresets"]}
@@ -288,7 +288,7 @@ export function EffortPresetsSettings() {
                     );
                   })}
                 </details>
-              </Fragment>
+              </div>
             );
           })}
           <SettingsRow
