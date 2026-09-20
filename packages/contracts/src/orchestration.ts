@@ -770,6 +770,17 @@ export const ThreadPullRequestLink = Schema.Struct({
 });
 export type ThreadPullRequestLink = typeof ThreadPullRequestLink.Type;
 
+/** Metadata assigning an ordinary child thread to a specialist role. */
+export const ThreadSpecialist = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  description: TrimmedNonEmptyString,
+  instructions: TrimmedNonEmptyString,
+  parentThreadId: ThreadId,
+  parentTurnId: Schema.NullOr(TurnId),
+});
+/** Metadata assigning an ordinary child thread to a specialist role. */
+export type ThreadSpecialist = typeof ThreadSpecialist.Type;
+
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
@@ -781,6 +792,7 @@ export const OrchestrationThread = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  specialist: Schema.optional(ThreadSpecialist),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   // Optional so payloads from pre-link servers still decode.
   pullRequests: Schema.Array(ThreadPullRequestLink).pipe(
@@ -868,6 +880,7 @@ export const OrchestrationThreadShell = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  specialist: Schema.optional(ThreadSpecialist),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   pullRequests: Schema.Array(ThreadPullRequestLink).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
@@ -1104,6 +1117,7 @@ const ThreadCreateCommand = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  specialist: Schema.optional(ThreadSpecialist),
   createdAt: IsoDateTime,
   historyImport: Schema.optional(Schema.Literal(true)),
 });
@@ -1736,6 +1750,8 @@ export const ThreadCreatedPayload = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  // Optional so events written before specialist threads were introduced still decode.
+  specialist: Schema.optional(ThreadSpecialist),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });

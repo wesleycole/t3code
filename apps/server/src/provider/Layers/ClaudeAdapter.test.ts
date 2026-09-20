@@ -461,6 +461,29 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("appends specialist instructions to the Claude system prompt", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+        specialistInstructions: "Review only the database migration.",
+      });
+
+      const append = harness.getLastCreateQueryInput()?.options.systemPrompt;
+      assert.deepEqual(append, {
+        type: "preset",
+        preset: "claude_code",
+        append: `${buildRuntimeInstructions({ harness: "Claude Code" })}\n\nReview only the database migration.`,
+      });
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("derives auto permission mode from auto runtime policy without skip flag", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {

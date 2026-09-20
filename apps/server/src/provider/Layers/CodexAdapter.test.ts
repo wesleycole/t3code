@@ -298,6 +298,24 @@ validationLayer("CodexAdapterLive validation", (it) => {
       });
     }),
   );
+  it.effect("passes specialist instructions to the Codex runtime", () =>
+    Effect.gen(function* () {
+      validationRuntimeFactory.factory.mockClear();
+      const adapter = yield* CodexAdapter;
+
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-specialist"),
+        runtimeMode: "full-access",
+        specialistInstructions: "Audit authentication boundaries only.",
+      });
+
+      NodeAssert.equal(
+        validationRuntimeFactory.factory.mock.calls[0]?.[0].specialistInstructions,
+        "Audit authentication boundaries only.",
+      );
+    }),
+  );
 });
 
 const sessionRuntimeFactory = makeRuntimeFactory();

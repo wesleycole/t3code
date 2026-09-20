@@ -1345,8 +1345,8 @@ const make = Effect.gen(function* () {
 
       yield* maybeGenerateAndRenameWorktreeBranchForFirstTurn({
         threadId: event.payload.threadId,
-        branch: thread.branch,
-        worktreePath: thread.worktreePath,
+        branch: thread.specialist === undefined ? thread.branch : null,
+        worktreePath: thread.specialist === undefined ? thread.worktreePath : null,
         ...generationInput,
       }).pipe(Effect.forkScoped);
 

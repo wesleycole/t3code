@@ -310,6 +310,7 @@ describe("CheckpointReactor", () => {
     readonly gitStatusRefreshCalls?: Array<string>;
     readonly pullRequestRefreshCalls?: Array<string>;
     readonly pullRequestRefresh?: Effect.Effect<void>;
+    readonly specialist?: boolean;
   }) {
     const cwd = createGitRepository();
     if (options?.initializeGit === false) {
@@ -442,6 +443,26 @@ describe("CheckpointReactor", () => {
       }),
     );
     await Effect.runPromise(
+      options?.specialist === true
+        ? engine.dispatch({
+            type: "thread.create",
+            commandId: CommandId.make("cmd-parent-thread-create"),
+            threadId: ThreadId.make("thread-parent"),
+            projectId: asProjectId("project-1"),
+            title: "Parent thread",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("codex"),
+              model: "gpt-5-codex",
+            },
+            interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+            runtimeMode: "approval-required",
+            branch: null,
+            worktreePath: null,
+            createdAt,
+          })
+        : Effect.void,
+    );
+    await Effect.runPromise(
       engine
         .dispatch({
           type: "thread.create",
@@ -458,6 +479,17 @@ describe("CheckpointReactor", () => {
           branch: options?.threadBranch ?? null,
           worktreePath:
             options?.threadWorktreePath !== undefined ? options.threadWorktreePath : cwd,
+          ...(options?.specialist === true
+            ? {
+                specialist: {
+                  name: "reviewer",
+                  description: "Reviews changes",
+                  instructions: "Review the assigned change.",
+                  parentThreadId: ThreadId.make("thread-parent"),
+                  parentTurnId: null,
+                },
+              }
+            : {}),
           createdAt,
         })
         .pipe(
@@ -854,6 +886,78 @@ describe("CheckpointReactor", () => {
           "README.md",
         ),
       ).toBe("v2\n");
+    }),
+  );
+
+  effectIt.effect("does not capture baseline or completion checkpoints for specialist turns", () =>
+    Effect.gen(function* () {
+      const harness = yield* Effect.promise(() =>
+        createHarness({ specialist: true, seedFilesystemCheckpoints: false }),
+      );
+      const threadId = ThreadId.make("thread-1");
+      const turnId = asTurnId("specialist-turn");
+      const createdAt = "2026-01-01T00:00:00.000Z";
+
+      harness.provider.emit({
+        type: "turn.started",
+        eventId: EventId.make("evt-specialist-started"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt,
+        threadId,
+        turnId,
+      });
+      NodeFS.writeFileSync(NodePath.join(harness.cwd, "README.md"), "specialist edit\n");
+      harness.provider.emit({
+        type: "turn.completed",
+        eventId: EventId.make("evt-specialist-completed"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt,
+        threadId,
+        turnId,
+        payload: { state: "completed" },
+      });
+      yield* Effect.promise(harness.drain);
+
+      expect(gitRefExists(harness.cwd, checkpointRefForThreadTurn(threadId, 0))).toBe(false);
+      expect(gitRefExists(harness.cwd, checkpointRefForThreadTurn(threadId, 1))).toBe(false);
+      const thread = (yield* Effect.promise(harness.readModel)).threads.find(
+        (entry) => entry.id === threadId,
+      );
+      expect(thread?.checkpoints).toEqual([]);
+    }),
+  );
+
+  effectIt.effect("does not restore files or delete checkpoint refs for a specialist revert", () =>
+    Effect.gen(function* () {
+      const harness = yield* Effect.promise(() => createHarness({ specialist: true }));
+      const threadId = ThreadId.make("thread-1");
+      const createdAt = "2026-01-01T00:00:00.000Z";
+      yield* harness.engine.dispatch({
+        type: "thread.turn.diff.complete",
+        commandId: CommandId.make("cmd-specialist-diff"),
+        threadId,
+        turnId: asTurnId("specialist-turn"),
+        completedAt: createdAt,
+        checkpointRef: checkpointRefForThreadTurn(threadId, 1),
+        status: "ready",
+        files: [],
+        checkpointTurnCount: 1,
+        createdAt,
+      });
+      NodeFS.writeFileSync(NodePath.join(harness.cwd, "README.md"), "specialist edit\n");
+      yield* harness.engine.dispatch({
+        type: "thread.checkpoint.revert",
+        commandId: CommandId.make("cmd-specialist-revert"),
+        threadId,
+        turnCount: 0,
+        createdAt,
+      });
+      yield* Effect.promise(harness.drain);
+
+      expect(NodeFS.readFileSync(NodePath.join(harness.cwd, "README.md"), "utf8")).toBe(
+        "specialist edit\n",
+      );
+      expect(gitRefExists(harness.cwd, checkpointRefForThreadTurn(threadId, 1))).toBe(true);
     }),
   );
 

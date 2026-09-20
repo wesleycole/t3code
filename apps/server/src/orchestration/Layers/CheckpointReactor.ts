@@ -398,7 +398,7 @@ const make = Effect.gen(function* () {
       }
 
       const thread = yield* resolveThreadDetail(event.threadId);
-      if (!thread) {
+      if (!thread || thread.specialist !== undefined) {
         return;
       }
 
@@ -466,7 +466,7 @@ const make = Effect.gen(function* () {
       }
 
       const thread = yield* resolveThreadDetail(event.threadId);
-      if (!thread) {
+      if (!thread || thread.specialist !== undefined) {
         return;
       }
 
@@ -678,7 +678,7 @@ const make = Effect.gen(function* () {
 
     const threadId = event.payload.threadId;
     const thread = yield* resolveThreadDetail(threadId);
-    if (!thread) {
+    if (!thread || thread.specialist !== undefined) {
       return;
     }
 
@@ -784,15 +784,15 @@ const make = Effect.gen(function* () {
       return;
     }
 
+    const restoreFiles = event.payload.restoreFiles !== false && thread.specialist === undefined;
+
     const checkpointCwd = yield* resolveCheckpointCwd({
       threadId: event.payload.threadId,
       thread,
       projects: yield* resolveThreadProjects(thread.projectId),
       preferSessionRuntime: true,
     }).pipe(
-      Effect.catch((error) =>
-        event.payload.restoreFiles === false ? Effect.succeed(undefined) : Effect.fail(error),
-      ),
+      Effect.catch((error) => (!restoreFiles ? Effect.succeed(undefined) : Effect.fail(error))),
     );
 
     const currentTurnCount = thread.checkpoints.reduce(
@@ -812,7 +812,7 @@ const make = Effect.gen(function* () {
 
     yield* providerService.assertConversationRollbackSupported(event.payload.threadId);
 
-    if (event.payload.restoreFiles !== false) {
+    if (restoreFiles) {
       if (!checkpointCwd) {
         yield* appendRevertFailureActivity({
           threadId: event.payload.threadId,
@@ -886,7 +886,7 @@ const make = Effect.gen(function* () {
       }
     }
 
-    if (checkpointCwd && staleCheckpointRefs.length > 0) {
+    if (thread.specialist === undefined && checkpointCwd && staleCheckpointRefs.length > 0) {
       yield* checkpointStore.deleteCheckpointRefs({
         cwd: checkpointCwd,
         checkpointRefs: staleCheckpointRefs,

@@ -181,6 +181,7 @@ export interface CodexSessionRuntimeOptions {
   readonly appServerArgs?: ReadonlyArray<string>;
   /** Capabilities the session's `t3-code` MCP credential grants; drives the prompt blocks. */
   readonly mcpCapabilities?: ReadonlySet<string>;
+  readonly specialistInstructions?: string;
 }
 
 export interface CodexSessionRuntimeSendTurnInput {
@@ -547,6 +548,7 @@ function buildThreadStartParams(input: {
   readonly runtimeMode: RuntimeMode;
   readonly model: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
+  readonly specialistInstructions?: string;
 }): EffectCodexSchema.V2ThreadStartParams {
   const config = runtimeModeToThreadConfig(input.runtimeMode);
   return {
@@ -556,6 +558,9 @@ function buildThreadStartParams(input: {
     approvalsReviewer: config.approvalsReviewer,
     ...(input.model ? { model: input.model } : {}),
     ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
+    ...(input.specialistInstructions
+      ? { developerInstructions: input.specialistInstructions }
+      : {}),
   };
 }
 
@@ -585,6 +590,7 @@ function buildCodexCollaborationMode(input: {
   readonly model?: string;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
   readonly browserToolsAvailable?: boolean | T3CodeToolAvailability;
+  readonly specialistInstructions?: string;
 }): EffectCodexSchema.V2TurnStartParams__CollaborationMode | undefined {
   if (input.interactionMode === undefined) {
     return undefined;
@@ -596,11 +602,16 @@ function buildCodexCollaborationMode(input: {
     settings: {
       model,
       reasoning_effort: reasoningEffort,
-      developer_instructions: buildCodexDeveloperInstructions(
-        input.interactionMode,
-        { model, reasoningEffort },
-        input.browserToolsAvailable ?? true,
-      ),
+      developer_instructions: [
+        buildCodexDeveloperInstructions(
+          input.interactionMode,
+          { model, reasoningEffort },
+          input.browserToolsAvailable ?? true,
+        ),
+        input.specialistInstructions,
+      ]
+        .filter((instructions): instructions is string => instructions !== undefined)
+        .join("\n\n"),
     },
   };
 }
@@ -623,6 +634,7 @@ export function buildTurnStartParams(input: {
   readonly interactionMode?: ProviderInteractionMode;
   /** Defaults to true so callers that predate the agent-access gate are unchanged. */
   readonly browserToolsAvailable?: boolean | T3CodeToolAvailability;
+  readonly specialistInstructions?: string;
 }): Effect.Effect<
   CodexTurnStartParamsWithCollaborationMode,
   CodexErrors.CodexAppServerProtocolParseError
@@ -640,10 +652,17 @@ export function buildTurnStartParams(input: {
 
   const config = runtimeModeToThreadConfig(input.runtimeMode);
   const collaborationMode = buildCodexCollaborationMode({
-    ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
+    ...(input.interactionMode
+      ? { interactionMode: input.interactionMode }
+      : input.specialistInstructions
+        ? { interactionMode: "default" as const }
+        : {}),
     ...(input.model ? { model: input.model } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
     browserToolsAvailable: input.browserToolsAvailable ?? true,
+    ...(input.specialistInstructions
+      ? { specialistInstructions: input.specialistInstructions }
+      : {}),
   });
 
   return decodeCodexTurnStartParamsWithCollaborationMode({
@@ -728,6 +747,7 @@ export const openCodexThread = (input: {
   readonly requestedModel: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
   readonly resumeThreadId: string | undefined;
+  readonly specialistInstructions?: string;
 }): Effect.Effect<typeof CodexThreadResumeMetadata.Type, CodexErrors.CodexAppServerError> => {
   const resumeThreadId = input.resumeThreadId;
   const startParams = buildThreadStartParams({
@@ -735,6 +755,9 @@ export const openCodexThread = (input: {
     runtimeMode: input.runtimeMode,
     model: input.requestedModel,
     serviceTier: input.serviceTier,
+    ...(input.specialistInstructions
+      ? { specialistInstructions: input.specialistInstructions }
+      : {}),
   });
 
   if (resumeThreadId === undefined) {
@@ -2444,6 +2467,9 @@ export const makeCodexSessionRuntime = (
         requestedModel,
         serviceTier: options.serviceTier,
         resumeThreadId: readResumeCursorThreadId(options.resumeCursor),
+        ...(options.specialistInstructions
+          ? { specialistInstructions: options.specialistInstructions }
+          : {}),
       });
 
       const providerThreadId = opened.thread.id;
@@ -2529,6 +2555,9 @@ export const makeCodexSessionRuntime = (
               options.appServerArgs,
               options.mcpCapabilities,
             ),
+            ...(options.specialistInstructions
+              ? { specialistInstructions: options.specialistInstructions }
+              : {}),
           });
           const rawResponse = yield* client.raw.request("turn/start", params);
           const response = yield* decodeV2TurnStartResponse(rawResponse).pipe(

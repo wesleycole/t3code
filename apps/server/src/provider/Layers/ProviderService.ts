@@ -913,6 +913,14 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     return capabilities;
   });
 
+  const specialistInstructionsForThread = Effect.fn(
+    "ProviderService.specialistInstructionsForThread",
+  )(function* (threadId: ThreadId) {
+    if (Option.isNone(projectionQuery)) return undefined;
+    const thread = yield* projectionQuery.value.getThreadShellById(threadId);
+    return Option.isSome(thread) ? thread.value.specialist?.instructions : undefined;
+  });
+
   /** Install only the local CLI here. device_open supplies a separate config for each host. */
   const hostPlatform = yield* HostProcessPlatform;
   const agentDeviceEnvironment = Effect.gen(function* () {
@@ -1268,6 +1276,17 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
       const persistedCwd = readPersistedCwd(input.binding.runtimePayload);
       const persistedModelSelection = readPersistedModelSelection(input.binding.runtimePayload);
+      const specialistInstructions = yield* specialistInstructionsForThread(input.binding.threadId);
+      if (
+        specialistInstructions !== undefined &&
+        input.binding.provider !== "claudeAgent" &&
+        input.binding.provider !== "codex"
+      ) {
+        return yield* toValidationError(
+          input.operation,
+          `Specialist child threads require the 'claudeAgent' or 'codex' driver; received '${input.binding.provider}'.`,
+        );
+      }
 
       yield* prepareMcpSession(input.binding.threadId, bindingInstanceId);
       const resumed = yield* adapter
@@ -1278,6 +1297,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           ...(persistedCwd ? { cwd: persistedCwd } : {}),
           ...(persistedModelSelection ? { modelSelection: persistedModelSelection } : {}),
           ...(hasResumeCursor ? { resumeCursor: input.binding.resumeCursor } : {}),
+          ...(specialistInstructions ? { specialistInstructions } : {}),
           runtimeMode: input.binding.runtimeMode ?? "full-access",
         })
         .pipe(Effect.onError(() => clearMcpSession(input.binding.threadId)));
@@ -1428,6 +1448,17 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           threadId,
           provider: resolvedProvider,
         };
+        const specialistInstructions = yield* specialistInstructionsForThread(threadId);
+        if (
+          specialistInstructions !== undefined &&
+          resolvedProvider !== "claudeAgent" &&
+          resolvedProvider !== "codex"
+        ) {
+          return yield* toValidationError(
+            "ProviderService.startSession",
+            `Specialist child threads require the 'claudeAgent' or 'codex' driver; received '${resolvedProvider}'.`,
+          );
+        }
         if (!instanceInfo.enabled) {
           return yield* toValidationError(
             "ProviderService.startSession",
@@ -1507,6 +1538,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             providerInstanceId: resolvedInstanceId,
             ...(effectiveCwd !== undefined ? { cwd: effectiveCwd } : {}),
             ...(effectiveResumeCursor !== undefined ? { resumeCursor: effectiveResumeCursor } : {}),
+            ...(specialistInstructions ? { specialistInstructions } : {}),
           })
           .pipe(Effect.onError(() => clearMcpSession(threadId)));
 

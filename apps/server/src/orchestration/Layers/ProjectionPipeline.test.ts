@@ -4353,26 +4353,91 @@ it.effect("restores pending turn-start metadata across projection pipeline resta
   ),
 );
 
-const engineLayer = it.layer(
-  OrchestrationEngineLive.pipe(
-    Layer.provideMerge(OrchestrationProjectionSnapshotQueryLive),
-    Layer.provide(ThreadBackgroundLiveness.layer),
-    Layer.provide(ThreadPlanProgress.layer),
-    Layer.provideMerge(OrchestrationProjectionPipelineLive),
-    Layer.provide(OrchestrationEventStoreLive),
-    Layer.provide(OrchestrationCommandReceiptRepositoryLive),
-    Layer.provide(RepositoryIdentityResolver.layer),
-    Layer.provideMerge(SqlitePersistenceMemory),
-    Layer.provideMerge(
-      ServerConfig.layerTest(process.cwd(), {
-        prefix: "t3-projection-pipeline-engine-dispatch-",
-      }),
-    ),
-    Layer.provideMerge(NodeServices.layer),
+const engineTestLayer = OrchestrationEngineLive.pipe(
+  Layer.provideMerge(OrchestrationProjectionSnapshotQueryLive),
+  Layer.provide(ThreadBackgroundLiveness.layer),
+  Layer.provide(ThreadPlanProgress.layer),
+  Layer.provideMerge(OrchestrationProjectionPipelineLive),
+  Layer.provide(OrchestrationEventStoreLive),
+  Layer.provide(OrchestrationCommandReceiptRepositoryLive),
+  Layer.provide(RepositoryIdentityResolver.layer),
+  Layer.provideMerge(SqlitePersistenceMemory),
+  Layer.provideMerge(
+    ServerConfig.layerTest(process.cwd(), {
+      prefix: "t3-projection-pipeline-engine-dispatch-",
+    }),
   ),
+  Layer.provideMerge(NodeServices.layer),
 );
 
-engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
+it.effect("roundtrips specialist metadata through SQLite shell and detail projections", () =>
+  Effect.gen(function* () {
+    const engine = yield* OrchestrationEngineService;
+    const snapshots = yield* ProjectionSnapshotQuery;
+    const projectId = ProjectId.make("project-specialist");
+    const parentThreadId = ThreadId.make("thread-specialist-parent");
+    const childThreadId = ThreadId.make("thread-specialist-child");
+    const createdAt = "2026-09-20T00:00:00.000Z";
+    const modelSelection = {
+      instanceId: ProviderInstanceId.make("codex"),
+      model: "gpt-5-codex",
+    };
+    const specialist = {
+      name: "Persistence reviewer",
+      description: "Reviews persistence changes",
+      instructions: "Review the complete persistence workstream and report concrete findings.",
+      parentThreadId,
+      parentTurnId: TurnId.make("turn-specialist-parent"),
+    };
+
+    yield* engine.dispatch({
+      type: "project.create",
+      commandId: CommandId.make("cmd-specialist-project"),
+      projectId,
+      title: "Specialist project",
+      workspaceRoot: "/tmp/project-specialist",
+      defaultModelSelection: modelSelection,
+      createdAt,
+    });
+    for (const [threadId, assignment] of [
+      [parentThreadId, undefined],
+      [childThreadId, specialist],
+    ] as const) {
+      yield* engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make(`cmd-${threadId}`),
+        threadId,
+        projectId,
+        title: threadId === parentThreadId ? "Parent" : "Child",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: "specialist-test",
+        worktreePath: "/tmp/project-specialist-worktree",
+        ...(assignment === undefined ? {} : { specialist: assignment }),
+        createdAt,
+      });
+    }
+
+    const shell = yield* snapshots.getThreadShellById(childThreadId);
+    const detail = yield* snapshots.getThreadDetailById(childThreadId);
+    assert.deepEqual(Option.getOrThrow(shell).specialist, specialist);
+    assert.deepEqual(Option.getOrThrow(detail).specialist, specialist);
+    for (const threadId of [childThreadId, parentThreadId]) {
+      yield* engine.dispatch({
+        type: "thread.delete",
+        commandId: CommandId.make(`delete-${threadId}`),
+        threadId,
+      });
+    }
+    assert.deepEqual(
+      (yield* snapshots.getDeletedWorktreeThreads()).map((thread) => thread.id),
+      [parentThreadId],
+    );
+  }).pipe(Effect.provide(Layer.fresh(engineTestLayer))),
+);
+
+it.layer(engineTestLayer)("OrchestrationProjectionPipeline via engine dispatch", (it) => {
   it.effect("projects dispatched engine events immediately", () =>
     Effect.gen(function* () {
       const engine = yield* OrchestrationEngineService;
