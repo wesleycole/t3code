@@ -233,7 +233,7 @@ export function EffortPresetsSettings() {
                 />
                 <details className="px-4 py-3">
                   <summary className="cursor-pointer rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-                    {EFFORT_PRESET_LABELS[preset]} specialists
+                    Specialists
                   </summary>
                   <p className="pt-3 text-xs text-muted-foreground">
                     Override a specialist’s model for this effort. Otherwise its Markdown definition
