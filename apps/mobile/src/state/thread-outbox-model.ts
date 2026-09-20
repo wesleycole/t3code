@@ -22,6 +22,7 @@ import {
   type ServerProvider,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import { sameEffortSelection } from "@t3tools/shared/effortPresets";
 
 import { DraftComposerAttachmentSchema } from "../lib/composer-image-schema";
 import type { DraftComposerAttachment } from "../lib/composerImages";
@@ -116,11 +117,7 @@ export function resolveQueuedThreadSettings(
 }
 
 export function modelSelectionsEqual(left: ModelSelectionType, right: ModelSelectionType): boolean {
-  return (
-    left.instanceId === right.instanceId &&
-    left.model === right.model &&
-    JSON.stringify(left.options ?? null) === JSON.stringify(right.options ?? null)
-  );
+  return sameEffortSelection(left, right);
 }
 
 export function encodeQueuedThreadMessage(message: QueuedThreadMessage): unknown {

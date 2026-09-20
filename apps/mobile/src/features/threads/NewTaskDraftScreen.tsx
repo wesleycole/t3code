@@ -108,10 +108,7 @@ import { projectEnvironment } from "../../state/projects";
 import { sourceControlEnvironment } from "../../state/sourceControl";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { ProjectCloneBanner } from "../../components/ProjectCloneBanner";
-import {
-  isModelSelectionUnavailable,
-  resolveSelectableModelSelection,
-} from "../../lib/modelOptions";
+import { isModelSelectionUnavailable } from "../../lib/modelOptions";
 import { deriveThreadTitleFromPrompt } from "../../lib/projectThreadStartTurn";
 import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
 import { enqueueThreadOutboxMessage } from "../../state/thread-outbox";
@@ -204,7 +201,10 @@ export function NewTaskDraftScreen(props: {
     connectedEnvironments.find(
       (environment) => environment.environmentId === selectedProject.environmentId,
     )?.connectionState === "connected";
-  const modelUnavailable = environmentConnected && flow.selectedModelOption?.isUnavailable === true;
+  const selectedEffortOption = flow.effortPresetOptions.find(
+    (option) => option.preset === flow.selectedEffortPreset,
+  );
+  const modelUnavailable = selectedEffortOption?.unavailableReason !== null;
   // A project added by cloning exists before its files do: the prompt can be
   // written meanwhile, but Start waits for the clone.
   const projectCloneState = useProjectClone(
@@ -1180,11 +1180,7 @@ export function NewTaskDraftScreen(props: {
     if (appAtomRegistry.get(composerContextImportsAtom)[draftKey]) return;
     // Read the latest explicit pick. Antigravity selections stay unchanged
     // when setup or a catalog change makes them unavailable.
-    const modelSelection =
-      resolveSelectableModelSelection(
-        selectedEnvironmentServerConfig,
-        draft.modelSelection ?? null,
-      ) ?? flow.selectedModel;
+    const modelSelection = draft.modelSelection ?? flow.selectedModel;
     const workspaceMode = draft.workspaceSelection?.mode ?? flow.workspaceMode;
     const selectedBranchName = draft.workspaceSelection?.branch ?? flow.selectedBranchName;
     const initialMessageText = draft.text.trim();
@@ -1596,7 +1592,9 @@ export function NewTaskDraftScreen(props: {
           disabled={isComposerInteractionLocked}
           onPress={settingsSheetPresentation.open}
         >
-          <Text className="text-xs text-foreground">Model unavailable. Open model settings.</Text>
+          <Text className="text-xs text-foreground">
+            {selectedEffortOption?.unavailableReason ?? "Effort unavailable."}
+          </Text>
         </Pressable>
       ) : null}
 
@@ -1678,7 +1676,7 @@ export function NewTaskDraftScreen(props: {
                   <View className="min-w-0 flex-1 flex-row items-center justify-end gap-2">
                     <View className="min-w-0 shrink">
                       <ComposerInlineControl
-                        accessibilityLabel="Model and reasoning settings"
+                        accessibilityLabel="Conversation effort"
                         disabled={isComposerInteractionLocked}
                         emphasized
                         iconNode={
@@ -1687,7 +1685,7 @@ export function NewTaskDraftScreen(props: {
                             size={16}
                           />
                         }
-                        label={flow.selectedModelOption?.label ?? "Choose model"}
+                        label={`${selectedEffortOption?.label ?? "Effort"} · ${selectedEffortOption?.detail ?? "Unavailable"}`}
                         maxWidth="100%"
                         onPress={settingsSheetPresentation.open}
                       />

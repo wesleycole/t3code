@@ -59,13 +59,12 @@ On web and desktop, use Settings → Providers → **Models** to add an unlisted
 name and options. Only options supported by the provider integration affect turns. Antigravity
 uses its account catalog and does not support custom models.
 
-## Model defaults
+## Effort presets
 
-T3 Code remembers your provider, model, and model options for new threads. A
-project's configured model takes precedence; resetting that project setting
-returns to the remembered selection.
-
-Leaving reasoning level or service tier unset uses the provider's own configuration.
+New conversations start at the environment's default effort. Each Low, Medium, High, or Ultra
+position maps to a provider instance, model, and that model's options in **Settings → General →
+Effort presets**. Choose one environment before editing its mappings. Projects do not override
+them, and changing a preset does not alter existing conversations.
 
 ## Quote an assistant response
 

@@ -78,6 +78,24 @@ const recordProviderUsage = (provider: string, instanceId: string | null = provi
   });
 
 it.layer(NodeServices.layer)("server settings", (it) => {
+  it.effect("persists complete effort mappings when only one model changes", () =>
+    Effect.gen(function* () {
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      const effortPresets = {
+        ...DEFAULT_SERVER_SETTINGS.effortPresets,
+        ultra: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.6-sol"),
+      };
+      yield* service.updateSettings({ effortPresets });
+      const raw = yield* fs.readFileString(config.settingsPath);
+      const persisted = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ServerSettings))(
+        raw,
+      );
+      assert.deepEqual(persisted.effortPresets, effortPresets);
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
   it.effect("preserves context when reading a provider environment secret fails", () => {
     const platformCause = PlatformError.systemError({
       _tag: "PermissionDenied",

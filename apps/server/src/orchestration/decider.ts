@@ -14,6 +14,7 @@ import {
   type ThreadPullRequestLink,
   type OrchestrationThreadActivity,
 } from "@t3tools/contracts";
+import { sameEffortSelection } from "@t3tools/shared/effortPresets";
 import {
   legacyLinkedPullRequestOf,
   legacyThreadPullRequestKey,
@@ -54,6 +55,24 @@ const isScriptRunCommand = Schema.is(SCRIPT_RUN_COMMAND_PATTERN);
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 const decodeUserInputRequestedPayload = Schema.decodeUnknownOption(UserInputRequestedPayload);
 const threadPullRequestLinksEqual = Schema.toEquivalence(Schema.NullOr(ThreadLinkedPullRequest));
+
+const rejectConversationModelChange = (
+  commandType: OrchestrationCommand["type"],
+  requested: OrchestrationThread["modelSelection"] | undefined,
+  thread: OrchestrationThread,
+): Effect.Effect<void, OrchestrationCommandInvariantError> => {
+  if (
+    requested === undefined ||
+    thread.modelSelection.effortPreset === undefined ||
+    sameEffortSelection(thread.modelSelection, requested)
+  ) {
+    return Effect.void;
+  }
+  return new OrchestrationCommandInvariantError({
+    commandType,
+    detail: `Thread '${thread.id}' cannot change its model selection after the conversation has started. Start a new thread instead.`,
+  });
+};
 
 /**
  * Blocked-on-you work derived from the thread's retained activities: an
@@ -916,6 +935,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      yield* rejectConversationModelChange(command.type, command.modelSelection, thread);
       // Old clients only see the derived single link. Unlink that request through
       // the same command path as modern clients, including stack dismissal, while
       // retaining other links they cannot see. Historical metadata events still replay unchanged.
@@ -1391,6 +1411,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      yield* rejectConversationModelChange(command.type, command.modelSelection, targetThread);
       const sourceProposedPlan = command.sourceProposedPlan;
       const sourceThread = sourceProposedPlan
         ? yield* requireThread({

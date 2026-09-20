@@ -244,7 +244,7 @@ export function useThreadComposerState() {
   const draftAttachments = selectedDraft?.attachments ?? [];
   const selectedThreadQueueCount = selectedThreadQueuedMessages.length;
   const selectedThread = selectedThreadDetail ?? selectedThreadShell;
-  const modelSelection = selectedDraft?.modelSelection ?? selectedThread?.modelSelection ?? null;
+  const modelSelection = selectedThread?.modelSelection ?? null;
   const runtimeMode = selectedDraft?.runtimeMode ?? selectedThread?.runtimeMode ?? null;
   const selectedProvider = selectedEnvironmentRuntime?.serverConfig?.providers.find(
     (provider) => provider.instanceId === modelSelection?.instanceId,
@@ -372,7 +372,9 @@ export function useThreadComposerState() {
       return null;
     }
 
-    const modelSelection = draft.modelSelection ?? thread.modelSelection;
+    // A conversation keeps the concrete model snapshot chosen at creation.
+    // Stale drafts from older clients must not switch providers or options.
+    const modelSelection = thread.modelSelection;
     const serverConfig = selectedEnvironmentRuntime?.serverConfig;
     if (
       selectedEnvironmentRuntime?.connectionState === "connected" &&

@@ -1,0 +1,356 @@
+/* Static material layers keep the instrument panel idle between interactions. */
+.console {
+  --signal: #71e3fa;
+  --engraving: #b5b9c2;
+  position: relative;
+  isolation: isolate;
+  container-type: inline-size;
+  padding: 14px;
+  border: 1px solid #080a0d;
+  border-radius: 14px;
+  color: var(--engraving);
+  background:
+    repeating-linear-gradient(0deg, #ffffff02 0 1px, #00000004 1px 3px, transparent 3px 5px),
+    linear-gradient(115deg, #ffffff06, transparent 42%, #00000018),
+    linear-gradient(#363940, #22252b 60%, #1d1f23);
+  box-shadow:
+    inset 0 1px 1px #ffffff50,
+    inset 0 0 0 3px #ffffff08,
+    inset 0 -2px 3px #00000080,
+    0 2px 3px #00000030;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.screw {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #81858b, #373b41 50%, #17191d);
+  box-shadow:
+    0 1px 2px #000,
+    0 0 0 1px #080a0d,
+    inset 0 1px 1px #ffffff40;
+}
+
+.screw::after {
+  content: "";
+  position: absolute;
+  inset: 5px 1px;
+  transform: rotate(-40deg);
+  background: #0d1014;
+  box-shadow: 0 1px 0 #ffffff30;
+}
+
+.screw:nth-child(1) {
+  top: 11px;
+  left: 11px;
+}
+.screw:nth-child(2) {
+  top: 11px;
+  right: 11px;
+  transform: rotate(80deg);
+}
+.screw:nth-child(3) {
+  bottom: 11px;
+  left: 11px;
+  transform: rotate(20deg);
+}
+.screw:nth-child(4) {
+  bottom: 11px;
+  right: 11px;
+  transform: rotate(110deg);
+}
+
+.dial {
+  position: relative;
+  width: 252px;
+  height: 248px;
+  user-select: none;
+}
+
+.scale {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.tick {
+  stroke: #717780;
+}
+.tickActive {
+  stroke: var(--signal);
+}
+
+.dialLabel {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px;
+  transform: translate(-50%, -50%);
+  color: var(--engraving);
+  font: 600 11px / 1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 -1px 1px #000;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.dialLabel:hover {
+  color: #f0f3f8;
+}
+.dialLabel[aria-pressed="true"] {
+  color: var(--signal);
+}
+
+.led {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #1d232b;
+  box-shadow:
+    inset 0 1px 2px #000,
+    0 1px 0 #ffffff20;
+}
+
+.dialLabel[aria-pressed="true"] .led,
+.status .led {
+  background: radial-gradient(circle at 40% 35%, #e0fcff, #71e3fa 35%, #1990ac);
+  box-shadow:
+    0 0 5px #5ee2ff,
+    0 0 13px #29b9e280;
+}
+
+.knob {
+  position: absolute;
+  top: 53px;
+  left: 47px;
+  width: 158px;
+  height: 158px;
+  border-radius: 50%;
+  touch-action: none;
+  cursor: grab;
+  background: linear-gradient(150deg, #07090b, #191c20 60%, #080a0c);
+  box-shadow:
+    0 5px 8px #00000080,
+    0 1px 1px 1px #ffffff25,
+    inset 0 2px 3px #000,
+    inset 0 -1px 1px #ffffff18;
+}
+
+.knob:active {
+  cursor: grabbing;
+}
+.knob:focus-visible,
+.dialLabel:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 5px;
+}
+
+.grip {
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    linear-gradient(145deg, #ffffff28, transparent 45%, #00000065),
+    repeating-conic-gradient(#555b65 0deg 2deg, #2b3038 3deg 5deg, #737984 6deg, #454b55 7.5deg);
+  box-shadow:
+    0 2px 3px 1px #000000d0,
+    inset 0 1px 2px #d2d8e080;
+}
+
+.face {
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at 35% 22%, #ffffff25, transparent 52%),
+    repeating-radial-gradient(
+      circle,
+      transparent 0 2px,
+      #aab2c008 2.5px 3px,
+      transparent 3.5px 5px
+    ),
+    conic-gradient(from 30deg, #343940, #444950, #32373e, #484d55, #343940);
+  box-shadow:
+    inset 0 1px 3px #ffffff30,
+    inset 0 0 0 2px #1a1e2450,
+    0 0 0 1px #191d24,
+    0 2px 3px #00000060;
+}
+
+.needle {
+  position: absolute;
+  inset: 15px;
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.needle::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: calc(50% - 2px);
+  width: 4px;
+  height: 26px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #adb0b2, #f6f5ed 45%, #d6d8d7);
+  box-shadow: 1px 1px 2px #000000a0;
+}
+
+.readout {
+  min-width: 0;
+  padding: 16px 6px 0 0;
+}
+
+.bezel {
+  padding: 8px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #3d4148, #1e2126 55%, #30343a);
+  box-shadow:
+    0 1px 1px #ffffff30,
+    0 0 0 2px #0b0d10,
+    inset 0 1px 2px #ffffff20;
+}
+
+.screen {
+  position: relative;
+  /* Keep the dial still as models change; longer configurations scroll within the display. */
+  overflow-y: auto;
+  height: 184px;
+  scrollbar-width: thin;
+  scrollbar-color: #376572 transparent;
+  margin: 0;
+  padding: 14px 12px 10px;
+  border-radius: 4px;
+  background:
+    linear-gradient(130deg, #ffffff06, #ffffff02 45%, transparent 45.5%),
+    repeating-linear-gradient(0deg, #00000018 0 1px, transparent 1px 3px),
+    linear-gradient(#0e171c, #060a0d);
+  color: var(--signal);
+  font: 500 12px / 1.5 var(--font-mono);
+  text-transform: uppercase;
+  text-shadow: 0 0 5px #49d8fa45;
+  box-shadow:
+    inset 0 2px 7px #000,
+    0 1px 0 #ffffff10;
+}
+
+.screen dt {
+  color: #80a8b4;
+  font-size: 10px;
+}
+.screen dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.model dd {
+  margin-top: 3px;
+  font-size: 16px;
+  line-height: 1.35;
+}
+.option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dotted #376572;
+}
+.provider {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 8px;
+  margin-top: 12px;
+  color: #80a8b4;
+  font-size: 10px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 14px;
+  font: 500 9px / 1.5 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.readout[data-unavailable] {
+  --signal: #f4c481;
+}
+.readout[data-unavailable] .status .led {
+  background: radial-gradient(circle at 40% 35%, #ffedcf, #edb365 35%, #a46b28);
+  box-shadow:
+    0 0 5px #f4c48180,
+    0 0 12px #edb36530;
+}
+
+@container (max-width: 460px) {
+  .controls {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .dial {
+    margin-inline: auto;
+  }
+  .readout {
+    padding: 0 12px 16px;
+  }
+  .model {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .model dd {
+    margin-top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .needle {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .console,
+  .knob,
+  .bezel {
+    border: 1px solid ButtonText;
+  }
+  .needle::after,
+  .dialLabel[aria-pressed="true"] .led {
+    background: Highlight;
+  }
+  .tick {
+    stroke: ButtonText;
+  }
+  .tickActive {
+    stroke: Highlight;
+  }
+  .dialLabel[aria-pressed="true"] {
+    color: Highlight;
+  }
+}

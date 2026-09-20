@@ -4,6 +4,20 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { ProviderDriverKind } from "./providerInstance.ts";
 
+/** Product-level effort presets, independent of a model's reasoning levels. */
+export const EFFORT_PRESETS = ["low", "medium", "high", "ultra"] as const;
+/** Stable identifier for a configurable dial position. */
+export const EffortPreset = Schema.Literals(EFFORT_PRESETS);
+/** A configurable dial position. */
+export type EffortPreset = typeof EffortPreset.Type;
+/** Display labels shared by clients. */
+export const EFFORT_PRESET_LABELS = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  ultra: "Ultra",
+} as const;
+
 export const ProviderOptionDescriptorType = Schema.Literals(["select", "boolean"]);
 export type ProviderOptionDescriptorType = typeof ProviderOptionDescriptorType.Type;
 

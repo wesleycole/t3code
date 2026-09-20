@@ -220,6 +220,25 @@ describe("serverSettings helpers", () => {
     ).toBeNull();
   });
 
+  it("replaces the complete effort preset map without retaining options from another provider", () => {
+    const current = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      effortPresets: {
+        ...DEFAULT_SERVER_SETTINGS.effortPresets,
+        high: createModelSelection(ProviderInstanceId.make("codex"), "gpt-6-astra", [
+          { id: "reasoningEffort", value: "high" },
+        ]),
+      },
+    });
+    const replacement = {
+      ...current.effortPresets,
+      high: createModelSelection(ProviderInstanceId.make("claudeAgent"), "claude-fable-5-1"),
+    };
+
+    expect(applyServerSettingsPatch(current, { effortPresets: replacement }).effortPresets).toEqual(
+      replacement,
+    );
+  });
+
   it("ignores missing and blank persisted observability URLs", () => {
     expect(parsePersistedServerObservabilitySettings("{}")).toEqual({
       otlpTracesUrl: undefined,

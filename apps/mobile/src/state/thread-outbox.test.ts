@@ -391,6 +391,7 @@ describe("thread outbox", () => {
         instanceId: ProviderInstanceId.make("codex"),
         model: "gpt-5.4",
         options: [{ id: "reasoningEffort", value: "xhigh" }],
+        effortPreset: "ultra",
       },
       runtimeMode: "approval-required",
       interactionMode: "plan",

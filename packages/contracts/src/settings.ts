@@ -16,6 +16,7 @@ import {
   CustomModelSetting,
   DEFAULT_TEXT_GENERATION_MODEL,
   DEFAULT_TEXT_GENERATION_REASONING_EFFORT,
+  EffortPreset,
   ProviderOptionSelections,
 } from "./model.ts";
 import {
@@ -1047,7 +1048,40 @@ export const StorageCleanupSettings = Schema.Struct({
 });
 export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
+/** Environment-owned templates copied into a conversation on its first send. */
+export const EffortPresets = Schema.Struct({
+  low: ModelSelection,
+  medium: ModelSelection,
+  high: ModelSelection,
+  ultra: ModelSelection,
+});
+/** The four editable dial mappings. */
+export type EffortPresets = typeof EffortPresets.Type;
+/** Initial personal dial configuration; unavailable models never fall back silently. */
+export const DEFAULT_EFFORT_PRESETS: EffortPresets = {
+  low: {
+    instanceId: ProviderInstanceId.make("codex"),
+    model: "gpt-5.6-sol",
+    options: [{ id: "reasoningEffort", value: "low" }],
+  },
+  medium: {
+    instanceId: ProviderInstanceId.make("codex"),
+    model: "gpt-6-astra",
+    options: [{ id: "reasoningEffort", value: "medium" }],
+  },
+  high: { instanceId: ProviderInstanceId.make("claudeAgent"), model: "claude-fable-5-1" },
+  ultra: {
+    instanceId: ProviderInstanceId.make("codex"),
+    model: "gpt-6-astra",
+    options: [{ id: "reasoningEffort", value: "xhigh" }],
+  },
+};
+
 export const ServerSettings = Schema.Struct({
+  effortPresets: EffortPresets.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_EFFORT_PRESETS)),
+  ),
+  defaultEffortPreset: EffortPreset.pipe(Schema.withDecodingDefault(Effect.succeed("medium"))),
   worktreeCleanup: WorktreeCleanup.pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   storageCleanup: StorageCleanupSettings.pipe(
     Schema.withDecodingDefault(
@@ -1393,6 +1427,8 @@ const OpenCodeSettingsPatch = Schema.Struct({
 });
 
 export const ServerSettingsPatch = Schema.Struct({
+  effortPresets: Schema.optionalKey(EffortPresets),
+  defaultEffortPreset: Schema.optionalKey(EffortPreset),
   worktreeCleanup: Schema.optionalKey(
     Schema.NullOr(
       Schema.Union([

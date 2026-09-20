@@ -4,7 +4,7 @@ import * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import * as Struct from "effect/Struct";
 import { OrchestrationMessageContext } from "./composerContext.ts";
-import { ProviderOptionSelections } from "./model.ts";
+import { EffortPreset, ProviderOptionSelections } from "./model.ts";
 import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
 import {
   ApprovalRequestId,
@@ -76,6 +76,7 @@ const ModelSelectionWire = Schema.Struct({
   instanceId: ProviderInstanceId,
   model: TrimmedNonEmptyString,
   options: Schema.optionalKey(ProviderOptionSelections),
+  effortPreset: Schema.optionalKey(EffortPreset),
 });
 
 // Source shape for persisted legacy payloads. Fields are typed as
@@ -87,6 +88,7 @@ const ModelSelectionSource = Schema.Struct({
   instanceId: Schema.optional(Schema.Unknown),
   model: Schema.Unknown,
   options: Schema.optional(Schema.Unknown),
+  effortPreset: Schema.optional(Schema.Unknown),
 });
 
 export const ModelSelection = ModelSelectionSource.pipe(
@@ -110,6 +112,7 @@ export const ModelSelection = ModelSelectionSource.pipe(
           model: raw.model,
         };
         if (raw.options !== undefined) base.options = raw.options;
+        if (raw.effortPreset !== undefined) base.effortPreset = raw.effortPreset;
         return Effect.succeed(base as typeof ModelSelectionWire.Encoded);
       },
       encode: (value) => {
@@ -118,6 +121,7 @@ export const ModelSelection = ModelSelectionSource.pipe(
           instanceId: value.instanceId,
         };
         if (value.options !== undefined) base.options = value.options;
+        if (value.effortPreset !== undefined) base.effortPreset = value.effortPreset;
         return Effect.succeed(base as typeof ModelSelectionSource.Encoded);
       },
     }),

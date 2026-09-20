@@ -2,6 +2,7 @@ import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
 } from "@t3tools/shared/usageLimits";
+import { resolveEffortPreset, sameEffortSelection } from "@t3tools/shared/effortPresets";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -102,6 +103,7 @@ import {
 import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
 import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ThreadDeletionReactor } from "./orchestration/Services/ThreadDeletionReactor.ts";
+import { OrchestrationCommandReceiptRepository } from "./persistence/Services/OrchestrationCommandReceipts.ts";
 import {
   observeRpcEffect as instrumentRpcEffect,
   observeRpcStream as instrumentRpcStream,
@@ -503,6 +505,7 @@ const makeWsRpcLayer = (
       const crypto = yield* Crypto.Crypto;
       const sql = yield* SqlClient.SqlClient;
       const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
+      const commandReceipts = yield* OrchestrationCommandReceiptRepository;
       /** A reference's host-level link key; the project's own host where the ref names none. */
       const resolvePullRequestSyncKey = (reference: PullRequestRef) =>
         reference.host !== undefined && reference.repository.includes("/")
@@ -1050,6 +1053,65 @@ const makeWsRpcLayer = (
         Effect.gen(function* () {
           const bootstrap = command.bootstrap;
           const { bootstrap: _bootstrap, ...finalTurnStartCommand } = command;
+
+          // Only the durable receipt proves this bootstrap reached its final
+          // turn command. A projected thread may merely be waiting for its
+          // worktree or setup script, and must never start the agent early.
+          if (bootstrap?.createThread) {
+            const receipt = yield* commandReceipts
+              .getByCommandId({ commandId: command.commandId })
+              .pipe(
+                Effect.mapError((cause) =>
+                  toDispatchCommandError(cause, "Failed to inspect bootstrap command receipt"),
+                ),
+              );
+            if (
+              Option.isSome(receipt) &&
+              receipt.value.status === "accepted" &&
+              receipt.value.aggregateKind === "thread" &&
+              receipt.value.aggregateId === command.threadId
+            ) {
+              return yield* dispatchFromClient(finalTurnStartCommand).pipe(
+                Effect.mapError((cause) =>
+                  toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
+                ),
+              );
+            }
+
+            const requestedSelection = bootstrap.createThread.modelSelection;
+            const requestedPreset = requestedSelection.effortPreset;
+            if (requestedPreset !== undefined) {
+              const settings = yield* serverSettings.getSettings.pipe(
+                Effect.mapError(
+                  (cause) => new OrchestrationDispatchCommandError({ message: cause.message }),
+                ),
+              );
+              const resolution = resolveEffortPreset(
+                settings.effortPresets,
+                requestedPreset,
+                yield* providerRegistry.getProviders,
+              );
+              if (resolution._tag === "Unavailable") {
+                return yield* new OrchestrationDispatchCommandError({
+                  message: resolution.reason,
+                });
+              }
+              if (!sameEffortSelection(requestedSelection, resolution.selection)) {
+                return yield* new OrchestrationDispatchCommandError({
+                  message: `The ${requestedPreset} effort configuration changed. Review the current selection and try again.`,
+                });
+              }
+              if (
+                command.modelSelection !== undefined &&
+                !sameEffortSelection(command.modelSelection, resolution.selection)
+              ) {
+                return yield* new OrchestrationDispatchCommandError({
+                  message:
+                    "The turn model selection does not match the new conversation selection.",
+                });
+              }
+            }
+          }
           let createdThread = false;
           let targetProjectId = bootstrap?.createThread?.projectId;
           let targetProjectCwd = bootstrap?.prepareWorktree?.projectCwd;
@@ -1734,8 +1796,91 @@ const makeWsRpcLayer = (
       const dispatchNormalizedCommand = (
         normalizedCommand: OrchestrationCommand,
       ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> => {
-        const dispatchEffect =
-          normalizedCommand.type === "thread.turn.start" && normalizedCommand.bootstrap
+        const dispatchEffect = Effect.gen(function* () {
+          const acceptedReceipt = yield* commandReceipts
+            .getByCommandId({ commandId: normalizedCommand.commandId })
+            .pipe(
+              Effect.map(
+                Option.exists(
+                  (receipt) =>
+                    receipt.status === "accepted" &&
+                    receipt.aggregateKind === "thread" &&
+                    "threadId" in normalizedCommand &&
+                    receipt.aggregateId === normalizedCommand.threadId,
+                ),
+              ),
+              Effect.mapError((cause) =>
+                toDispatchCommandError(cause, "Failed to inspect command receipt"),
+              ),
+            );
+          if (
+            normalizedCommand.type === "thread.create" &&
+            normalizedCommand.modelSelection.effortPreset !== undefined &&
+            !acceptedReceipt
+          ) {
+            const preset = normalizedCommand.modelSelection.effortPreset;
+            const settings = yield* serverSettings.getSettings.pipe(
+              Effect.mapError(
+                (cause) => new OrchestrationDispatchCommandError({ message: cause.message }),
+              ),
+            );
+            const resolution = resolveEffortPreset(
+              settings.effortPresets,
+              preset,
+              yield* providerRegistry.getProviders,
+            );
+            if (resolution._tag === "Unavailable") {
+              return yield* new OrchestrationDispatchCommandError({ message: resolution.reason });
+            }
+            if (!sameEffortSelection(normalizedCommand.modelSelection, resolution.selection)) {
+              return yield* new OrchestrationDispatchCommandError({
+                message: `The ${preset} effort configuration changed. Review the current selection and try again.`,
+              });
+            }
+          }
+
+          if (
+            !acceptedReceipt &&
+            (normalizedCommand.type === "thread.meta.update" ||
+              (normalizedCommand.type === "thread.turn.start" && !normalizedCommand.bootstrap)) &&
+            normalizedCommand.modelSelection?.effortPreset !== undefined
+          ) {
+            const thread = yield* projectionSnapshotQuery
+              .getThreadShellById(normalizedCommand.threadId)
+              .pipe(
+                Effect.map(Option.getOrUndefined),
+                Effect.mapError((cause) =>
+                  toDispatchCommandError(cause, "Failed to inspect thread model selection"),
+                ),
+              );
+            if (thread?.modelSelection.effortPreset === undefined) {
+              const preset = normalizedCommand.modelSelection.effortPreset;
+              const settings = yield* serverSettings.getSettings.pipe(
+                Effect.mapError(
+                  (cause) => new OrchestrationDispatchCommandError({ message: cause.message }),
+                ),
+              );
+              const resolution = resolveEffortPreset(
+                settings.effortPresets,
+                preset,
+                yield* providerRegistry.getProviders,
+              );
+              if (
+                resolution._tag === "Unavailable" ||
+                !sameEffortSelection(normalizedCommand.modelSelection, resolution.selection)
+              ) {
+                return yield* new OrchestrationDispatchCommandError({
+                  message:
+                    resolution._tag === "Unavailable"
+                      ? resolution.reason
+                      : `The ${preset} effort configuration changed. Review the current selection and try again.`,
+                });
+              }
+            }
+          }
+
+          return yield* normalizedCommand.type === "thread.turn.start" &&
+          normalizedCommand.bootstrap
             ? dispatchBootstrapTurnStart(normalizedCommand)
             : dispatchFromClient(normalizedCommand).pipe(
                 Effect.tap(({ sequence }) =>
@@ -1750,6 +1895,7 @@ const makeWsRpcLayer = (
                   toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
                 ),
               );
+        });
 
         return startup
           .enqueueCommand(dispatchEffect)

@@ -1446,6 +1446,41 @@ it.effect("ModelSelection encodes to the canonical instanceId wire form", () =>
   }),
 );
 
+it.effect("ModelSelection round-trips an effort preset marker", () =>
+  Effect.gen(function* () {
+    const decoded = yield* decodeModelSelection({
+      instanceId: "codex",
+      model: "gpt-6-astra",
+      effortPreset: "ultra",
+    });
+    const encoded = yield* encodeModelSelection(decoded);
+
+    assert.deepStrictEqual(encoded, {
+      instanceId: "codex",
+      model: "gpt-6-astra",
+      effortPreset: "ultra",
+    });
+  }),
+);
+
+it.effect(
+  "ModelSelection keeps legacy payloads compatible and rejects invalid effort markers",
+  () =>
+    Effect.gen(function* () {
+      const legacy = yield* decodeModelSelection({ provider: "claudeAgent", model: "fable" });
+      assert.strictEqual(legacy.effortPreset, undefined);
+
+      const invalid = yield* Effect.exit(
+        decodeModelSelection({
+          instanceId: "codex",
+          model: "gpt-6-astra",
+          effortPreset: "maximum",
+        }),
+      );
+      assert.strictEqual(invalid._tag, "Failure");
+    }),
+);
+
 it.effect("ModelSelection rejects malformed instance ids", () =>
   Effect.gen(function* () {
     const result = yield* Effect.exit(

@@ -4,6 +4,7 @@ import {
   DEFAULT_MODEL,
   DEFAULT_MODEL_BY_PROVIDER,
   defaultInstanceIdForDriver,
+  EffortPreset,
   EnvironmentId,
   ModelSelection,
   ProjectId,
@@ -76,6 +77,7 @@ import { replaceComposerContextReferences } from "@t3tools/shared/composerContex
 import { UnifiedSettings } from "@t3tools/contracts/settings";
 import { ReviewCommentContextSchema, type ReviewCommentContext } from "./reviewCommentContext";
 const isRuntimeMode = Schema.is(RuntimeMode);
+const isEffortPreset = Schema.is(EffortPreset);
 const isProviderDriverKind = Schema.is(ProviderDriverKind);
 const isReviewCommentContext = Schema.is(ReviewCommentContextSchema);
 const isSnapShotSource = Schema.is(SnapShotSource);
@@ -1060,9 +1062,11 @@ function normalizeModelSelection(
   if (!model) {
     return null;
   }
+  const rawPreset = candidate?.effortPreset;
+  const preset = isEffortPreset(rawPreset) ? { effortPreset: rawPreset } : {};
   if (Array.isArray(candidate?.options)) {
     const selections = coerceProviderOptionSelections(candidate.options);
-    return createModelSelection(instanceId, model, selections) as NormalizedModelSelection;
+    return { ...createModelSelection(instanceId, model, selections), ...preset };
   }
   // Per-kind options were a pre-migration concern; only recover them for a
   // built-in-kind instance. Custom instances don't have a legacy options
@@ -1076,7 +1080,7 @@ function normalizeModelSelection(
       )
     : null;
   const options = kindForLegacyOptions ? modelOptions?.[kindForLegacyOptions] : undefined;
-  return createModelSelection(instanceId, model, options) as NormalizedModelSelection;
+  return { ...createModelSelection(instanceId, model, options), ...preset };
 }
 
 type NormalizedModelSelection = Omit<ModelSelection, "instanceId"> & {

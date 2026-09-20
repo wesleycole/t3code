@@ -20,7 +20,6 @@ import {
   type AssistantCitation,
   type ApprovalRequestId,
   type ChatFileAttachment,
-  DEFAULT_MODEL,
   type EnvironmentId,
   type MessageId,
   type ModelSelection,
@@ -8288,11 +8287,7 @@ export default function ChatView(props: ChatViewProps) {
       }
     }
     const title = truncate(titleSeed);
-    const threadCreateModelSelection = createModelSelection(
-      ctxSelectedModelSelection.instanceId,
-      ctxSelectedModel || activeProjectDefaultModelSelection?.model || DEFAULT_MODEL,
-      ctxSelectedModelSelection.options,
-    );
+    const threadCreateModelSelection = ctxSelectedModelSelection;
 
     let failure: AtomCommandResult<unknown, unknown> | null = null;
     // Auto-title from first message
