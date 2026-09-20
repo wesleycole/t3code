@@ -34,6 +34,7 @@ import {
 import * as Schema from "effect/Schema";
 import * as Equal from "effect/Equal";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { DeepMutable } from "effect/Types";
 import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
 import { useMemo } from "react";
@@ -78,6 +79,7 @@ import { UnifiedSettings } from "@t3tools/contracts/settings";
 import { ReviewCommentContextSchema, type ReviewCommentContext } from "./reviewCommentContext";
 const isRuntimeMode = Schema.is(RuntimeMode);
 const isEffortPreset = Schema.is(EffortPreset);
+const decodeModelSelectionOption = Schema.decodeUnknownOption(ModelSelection);
 const isProviderDriverKind = Schema.is(ProviderDriverKind);
 const isReviewCommentContext = Schema.is(ReviewCommentContextSchema);
 const isSnapShotSource = Schema.is(SnapShotSource);
@@ -1063,7 +1065,13 @@ function normalizeModelSelection(
     return null;
   }
   const rawPreset = candidate?.effortPreset;
-  const preset = isEffortPreset(rawPreset) ? { effortPreset: rawPreset } : {};
+  const specialistModels = Option.getOrUndefined(
+    decodeModelSelectionOption(candidate),
+  )?.specialistModels;
+  const preset = {
+    ...(isEffortPreset(rawPreset) ? { effortPreset: rawPreset } : {}),
+    ...(specialistModels ? { specialistModels } : {}),
+  };
   if (Array.isArray(candidate?.options)) {
     const selections = coerceProviderOptionSelections(candidate.options);
     return { ...createModelSelection(instanceId, model, selections), ...preset };

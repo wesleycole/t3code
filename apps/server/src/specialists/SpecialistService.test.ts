@@ -7,6 +7,7 @@ import {
   ProviderInstanceId,
   ThreadId,
   TurnId,
+  type ModelSelection,
 } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
@@ -30,6 +31,7 @@ import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSna
 import * as ThreadBackgroundLiveness from "../orchestration/ThreadBackgroundLiveness.ts";
 import * as ThreadPlanProgress from "../orchestration/ThreadPlanProgress.ts";
 import { ProviderService } from "../provider/Services/ProviderService.ts";
+import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { buildSpecialistInstructions, buildSpecialistTaskPrompt } from "./prompts.ts";
 import { SpecialistService } from "./SpecialistService.ts";
 
@@ -38,6 +40,12 @@ const parentId = ThreadId.make("parent");
 const otherParentId = ThreadId.make("other-parent");
 const parentInstance = ProviderInstanceId.make("parent-provider");
 const specialistInstance = ProviderInstanceId.make("specialist-provider");
+const overrideInstance = ProviderInstanceId.make("claude-override");
+const overrideSelection = {
+  instanceId: overrideInstance,
+  model: "fable",
+  options: [{ id: "effort", value: "high" }],
+};
 const definition = {
   name: "reviewer",
   description: "Reviews lifecycle behavior.",
@@ -47,17 +55,19 @@ const definition = {
 
 const providerLayer = (driverKind: "codex" | "claudeAgent" | "cursor" = "codex") =>
   Layer.mock(ProviderService)({
-    getInstanceInfo: (instanceId) =>
-      Effect.succeed({
+    getInstanceInfo: (instanceId) => {
+      const driver = instanceId === overrideInstance ? "claudeAgent" : driverKind;
+      return Effect.succeed({
         instanceId,
-        driverKind: ProviderDriverKind.make(driverKind),
+        driverKind: ProviderDriverKind.make(driver),
         displayName: undefined,
         enabled: true,
         continuationIdentity: {
-          driverKind: ProviderDriverKind.make(driverKind),
-          continuationKey: `${driverKind}:${instanceId}`,
+          driverKind: ProviderDriverKind.make(driver),
+          continuationKey: `${driver}:${instanceId}`,
         },
-      }),
+      });
+    },
   });
 
 const orchestrationLayer = Layer.mergeAll(
@@ -83,9 +93,49 @@ const testLayer = (driverKind?: "codex" | "claudeAgent" | "cursor") =>
   SpecialistService.layer.pipe(
     Layer.provideMerge(orchestrationLayer),
     Layer.provide(providerLayer(driverKind)),
+    Layer.provide(
+      Layer.mock(ProviderRegistry)({
+        getProviders: Effect.succeed([
+          {
+            instanceId: overrideInstance,
+            driver: ProviderDriverKind.make("claudeAgent"),
+            enabled: true,
+            installed: true,
+            status: "ready",
+            version: null,
+            auth: { status: "authenticated" },
+            checkedAt: now,
+            models: [
+              {
+                slug: "fable",
+                name: "Fable",
+                isCustom: false,
+                capabilities: {
+                  optionDescriptors: [
+                    {
+                      id: "effort",
+                      label: "Effort",
+                      type: "select",
+                      options: [
+                        { id: "high", label: "High" },
+                        { id: "low", label: "Low" },
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+            slashCommands: [],
+            skills: [],
+          },
+        ]),
+      }),
+    ),
   );
 
-const seed = Effect.fnUntraced(function* () {
+const seed = Effect.fnUntraced(function* (
+  selection: ModelSelection = { instanceId: parentInstance, model: "parent-model" },
+) {
   const engine = yield* OrchestrationEngineService;
   yield* engine.dispatch({
     type: "project.create",
@@ -103,7 +153,7 @@ const seed = Effect.fnUntraced(function* () {
       threadId,
       projectId: ProjectId.make("project"),
       title: String(threadId),
-      modelSelection: { instanceId: parentInstance, model: "parent-model" },
+      modelSelection: selection,
       runtimeMode: "full-access",
       interactionMode: "default",
       branch: "main",
@@ -215,6 +265,64 @@ const completeTurn = Effect.fnUntraced(function* (
 });
 
 it.layer(Layer.fresh(testLayer()))("SpecialistService integration", (it) => {
+  it.effect("uses the parent's specialist snapshot across providers and follow-ups", () =>
+    Effect.gen(function* () {
+      yield* seed({
+        instanceId: parentInstance,
+        model: "astra",
+        effortPreset: "high",
+        specialistModels: {
+          reviewer: overrideSelection,
+          librarian: { instanceId: specialistInstance, model: "luna" },
+        },
+      });
+      const snapshots = yield* ProjectionSnapshotQuery;
+      const engine = yield* OrchestrationEngineService;
+      const service = yield* SpecialistService;
+      const { fiber, childId } = yield* startRun("Review with the High effort specialist");
+      const child = Option.getOrThrow(yield* snapshots.getThreadDetailById(childId));
+      assert.deepEqual(child.modelSelection, {
+        instanceId: overrideInstance,
+        model: "fable",
+        options: [{ id: "effort", value: "high" }],
+      });
+      assert.strictEqual(child.specialist?.instructions, buildSpecialistInstructions(definition));
+      yield* completeTurn(childId, "preset", "review answer");
+      yield* Fiber.join(fiber);
+
+      const events = yield* engine.subscribeDomainEvents;
+      const followUp = yield* Effect.forkChild(service.followUp(parentId, childId, "Check again"));
+      const requested = Option.getOrThrow(
+        yield* events.pipe(
+          Stream.filter((event) => event.type === "thread.turn-start-requested"),
+          Stream.runHead,
+        ),
+      );
+      if (requested.type !== "thread.turn-start-requested") return;
+      assert.deepEqual(requested.payload.modelSelection, child.modelSelection);
+      yield* completeTurn(childId, "preset-followup", "confirmed");
+      assert.strictEqual((yield* Fiber.join(followUp)).text, "confirmed");
+    }).pipe(Effect.scoped, Effect.provide(Layer.fresh(testLayer()))),
+  );
+
+  it.effect("reports an unavailable override instead of falling back to the definition", () =>
+    Effect.gen(function* () {
+      yield* seed({
+        instanceId: parentInstance,
+        model: "astra",
+        effortPreset: "high",
+        specialistModels: { reviewer: { ...overrideSelection, model: "missing-model" } },
+      });
+      const service = yield* SpecialistService;
+      const snapshots = yield* ProjectionSnapshotQuery;
+      const error = yield* Effect.flip(service.run(parentId, definition, "Review"));
+      assert.include(error.message, "missing-model is unavailable");
+      assert.isFalse(
+        (yield* snapshots.getShellSnapshot()).threads.some((thread) => thread.specialist),
+      );
+    }).pipe(Effect.scoped, Effect.provide(Layer.fresh(testLayer()))),
+  );
+
   it.effect(
     "creates an independent configured child and returns only its persisted terminal answer",
     () =>

@@ -1446,12 +1446,20 @@ it.effect("ModelSelection encodes to the canonical instanceId wire form", () =>
   }),
 );
 
-it.effect("ModelSelection round-trips an effort preset marker", () =>
+it.effect("ModelSelection round-trips effort and specialist model snapshots", () =>
   Effect.gen(function* () {
     const decoded = yield* decodeModelSelection({
       instanceId: "codex",
       model: "gpt-6-astra",
       effortPreset: "ultra",
+      specialistModels: {
+        oracle: {
+          instanceId: "claudeAgent",
+          model: "fable",
+          options: [{ id: "effort", value: "high" }],
+        },
+        librarian: { instanceId: "codex", model: "luna" },
+      },
     });
     const encoded = yield* encodeModelSelection(decoded);
 
@@ -1459,6 +1467,14 @@ it.effect("ModelSelection round-trips an effort preset marker", () =>
       instanceId: "codex",
       model: "gpt-6-astra",
       effortPreset: "ultra",
+      specialistModels: {
+        oracle: {
+          instanceId: "claudeAgent",
+          model: "fable",
+          options: [{ id: "effort", value: "high" }],
+        },
+        librarian: { instanceId: "codex", model: "luna" },
+      },
     });
   }),
 );

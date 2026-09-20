@@ -39,6 +39,25 @@ export function EffortDial({
   onChange: (preset: EffortPreset) => void;
 }) {
   const composerFloatingLayerProps = useComposerMenuProps();
+  const specialistSelections = Object.entries(
+    (lockedSelection ? lockedSelection.specialistModels : presets[preset].specialistModels) ?? {},
+  );
+  const specialistSummary =
+    specialistSelections.length > 0 ? (
+      <ul aria-label="Specialist models" className="max-h-32 space-y-1 overflow-y-auto text-xs">
+        {specialistSelections.map(([name, selection]) => (
+          <li key={name} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">
+            <span className="capitalize">{name}</span>
+            <span className="text-muted-foreground wrap-anywhere">
+              {selection.model}
+              {selection.options?.length
+                ? ` · ${selection.options.map((option) => String(option.value)).join(", ")}`
+                : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+    ) : null;
   if (lockedSelection) {
     return (
       <Tooltip>
@@ -54,8 +73,9 @@ export function EffortDial({
               : lockedSelection.model}
           </span>
         </TooltipTrigger>
-        <TooltipPopup>
-          Fixed for this conversation. Start a new conversation to change effort.
+        <TooltipPopup className="max-w-sm space-y-2">
+          <p>Fixed for this conversation. Start a new conversation to change effort.</p>
+          {specialistSummary}
         </TooltipPopup>
       </Tooltip>
     );
@@ -251,7 +271,8 @@ export function EffortDial({
           ))}
         </div>
         <div className="mt-3 border-t px-1 pt-3" aria-live="polite">
-          <p className="h-12 overflow-y-auto text-xs wrap-anywhere text-muted-foreground">
+          {specialistSummary}
+          <p className="mt-2 text-xs wrap-anywhere text-muted-foreground">
             {resolution._tag === "Unavailable"
               ? resolution.reason
               : "Configure presets in Settings → General."}

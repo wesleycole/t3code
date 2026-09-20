@@ -1,4 +1,5 @@
 import { CommandId, MessageId, ThreadId, type OrchestrationThread } from "@t3tools/contracts";
+import { resolveEffortModel } from "@t3tools/shared/effortPresets";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -13,6 +14,7 @@ import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSna
 import { ProjectionTurnRepository } from "../persistence/Services/ProjectionTurns.ts";
 import { ProjectionTurnRepositoryLive } from "../persistence/Layers/ProjectionTurns.ts";
 import { ProviderService } from "../provider/Services/ProviderService.ts";
+import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import type { SpecialistDefinition } from "./definitions.ts";
 import { buildSpecialistInstructions, buildSpecialistTaskPrompt } from "./prompts.ts";
 
@@ -99,6 +101,7 @@ export class SpecialistService extends Context.Service<
       const snapshots = yield* ProjectionSnapshotQuery;
       const turns = yield* ProjectionTurnRepository;
       const providers = yield* ProviderService;
+      const registry = yield* ProviderRegistry;
       const crypto = yield* Crypto.Crypto;
       const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
       const commandId = crypto.randomUUIDv4.pipe(Effect.orDie, Effect.map(CommandId.make));
@@ -206,19 +209,32 @@ export class SpecialistService extends Context.Service<
           return yield* new SpecialistError({
             detail: "Specialists cannot delegate to more specialists.",
           });
+        const overrides = parent.modelSelection.specialistModels;
+        const override =
+          overrides && Object.hasOwn(overrides, definition.name)
+            ? overrides[definition.name]
+            : undefined;
+        const selected = override ?? definition.modelSelection;
         const target = yield* providers
-          .getInstanceInfo(definition.modelSelection.instanceId)
+          .getInstanceInfo(selected.instanceId)
           .pipe(Effect.mapError(failure));
         if (target.driverKind !== "codex" && target.driverKind !== "claudeAgent") {
           return yield* new SpecialistError({
             detail: `Specialist '${definition.name}' requires a Codex or Claude provider instance.`,
           });
         }
+        if (override) {
+          const resolution = resolveEffortModel(override, yield* registry.getProviders);
+          if (resolution._tag === "Unavailable")
+            return yield* new SpecialistError({
+              detail: `Specialist '${definition.name}': ${resolution.reason}`,
+            });
+        }
         const modelSelection = {
-          ...definition.modelSelection,
-          ...(definition.modelSelection.options
+          ...selected,
+          ...(selected.options
             ? {
-                options: definition.modelSelection.options.map((option) =>
+                options: selected.options.map((option) =>
                   target.driverKind === "claudeAgent" && option.id === "reasoningEffort"
                     ? { ...option, id: "effort" }
                     : option,

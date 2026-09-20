@@ -55,6 +55,20 @@ Start a new provider session after adding or changing definitions. Definitions a
 loaded from the thread's checkout when its tools are first requested; existing
 specialist conversations retain their original role instructions.
 
+## Choose models by effort
+
+In **Settings → General → Effort presets**, expand the specialists for an effort
+level and choose each specialist's provider, model, and reasoning options. For
+example, High can use Astra for the primary agent and Fable for Oracle and Critic.
+Use **Custom specialist** to configure another name from your project definitions.
+
+Overrides are saved with the conversation on its first send, including conversations
+started from mobile. Later settings changes affect new conversations only. A specialist
+without an override uses its Markdown definition's model; resetting its override
+restores that behavior. Follow-ups keep the specialist conversation's original model.
+If an overridden model is unavailable, that specialist reports an error rather than
+silently using a different model. The primary conversation can still run.
+
 ## Use a specialist
 
 Ask your agent: “Use Critic to review these changes.” It receives

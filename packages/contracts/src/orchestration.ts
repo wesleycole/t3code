@@ -77,6 +77,16 @@ const ModelSelectionWire = Schema.Struct({
   model: TrimmedNonEmptyString,
   options: Schema.optionalKey(ProviderOptionSelections),
   effortPreset: Schema.optionalKey(EffortPreset),
+  specialistModels: Schema.optionalKey(
+    Schema.Record(
+      Schema.String,
+      Schema.Struct({
+        instanceId: ProviderInstanceId,
+        model: TrimmedNonEmptyString,
+        options: Schema.optionalKey(ProviderOptionSelections),
+      }),
+    ),
+  ),
 });
 
 // Source shape for persisted legacy payloads. Fields are typed as
@@ -89,6 +99,7 @@ const ModelSelectionSource = Schema.Struct({
   model: Schema.Unknown,
   options: Schema.optional(Schema.Unknown),
   effortPreset: Schema.optional(Schema.Unknown),
+  specialistModels: Schema.optional(Schema.Unknown),
 });
 
 export const ModelSelection = ModelSelectionSource.pipe(
@@ -113,6 +124,7 @@ export const ModelSelection = ModelSelectionSource.pipe(
         };
         if (raw.options !== undefined) base.options = raw.options;
         if (raw.effortPreset !== undefined) base.effortPreset = raw.effortPreset;
+        if (raw.specialistModels !== undefined) base.specialistModels = raw.specialistModels;
         return Effect.succeed(base as typeof ModelSelectionWire.Encoded);
       },
       encode: (value) => {
@@ -122,6 +134,7 @@ export const ModelSelection = ModelSelectionSource.pipe(
         };
         if (value.options !== undefined) base.options = value.options;
         if (value.effortPreset !== undefined) base.effortPreset = value.effortPreset;
+        if (value.specialistModels !== undefined) base.specialistModels = value.specialistModels;
         return Effect.succeed(base as typeof ModelSelectionSource.Encoded);
       },
     }),

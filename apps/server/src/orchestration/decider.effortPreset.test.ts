@@ -24,6 +24,9 @@ const presetSelection: ModelSelection = {
     { id: "webSearch", value: false },
   ],
   effortPreset: "high",
+  specialistModels: {
+    oracle: { instanceId: ProviderInstanceId.make("claudeAgent"), model: "fable" },
+  },
 };
 const { effortPreset: _presetMarker, ...selectionWithoutPreset } = presetSelection;
 const readModel: OrchestrationReadModel = {
@@ -96,6 +99,19 @@ it.layer(NodeServices.layer)("effort preset conversation invariants", (it) => {
       selection: { ...presetSelection, options: [{ id: "reasoningEffort", value: "low" }] },
     },
     { name: "removes the preset marker", selection: selectionWithoutPreset },
+    {
+      name: "removes specialist overrides",
+      selection: { ...presetSelection, specialistModels: {} },
+    },
+    {
+      name: "changes only a specialist model",
+      selection: {
+        ...presetSelection,
+        specialistModels: {
+          oracle: { instanceId: ProviderInstanceId.make("claudeAgent"), model: "opus" },
+        },
+      },
+    },
   ])("rejects a turn that $name", ({ selection }) =>
     Effect.gen(function* () {
       const result = yield* Effect.result(

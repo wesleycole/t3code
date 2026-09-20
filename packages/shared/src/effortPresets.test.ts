@@ -91,6 +91,46 @@ const providers = [
 ];
 
 describe("resolveEffortPreset", () => {
+  it("freezes distinct specialist choices and keeps an unavailable specialist from blocking the primary", () => {
+    const configured = {
+      ...presets,
+      high: {
+        ...presets.medium,
+        specialistModels: {
+          oracle: presets.high,
+          librarian: { instanceId: ProviderInstanceId.make("codex"), model: "sol" },
+          critic: { instanceId: ProviderInstanceId.make("offline"), model: "fable" },
+        },
+      },
+    };
+    expect(resolveEffortPreset(configured, "high", providers)).toEqual({
+      _tag: "Available",
+      modelName: "Astra",
+      selection: {
+        instanceId: ProviderInstanceId.make("codex"),
+        model: "astra",
+        options: [{ id: "reasoningEffort", value: "medium" }],
+        effortPreset: "high",
+        specialistModels: {
+          oracle: {
+            instanceId: ProviderInstanceId.make("claudeAgent"),
+            model: "fable",
+            options: [{ id: "thinking", value: true }],
+          },
+          librarian: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "sol",
+            options: [{ id: "reasoningEffort", value: "medium" }],
+          },
+          critic: { instanceId: ProviderInstanceId.make("offline"), model: "fable" },
+        },
+      },
+    });
+    expect(resolveEffortPreset(configured, "low", providers)).toMatchObject({
+      selection: { model: "sol", effortPreset: "low" },
+    });
+  });
+
   it("resolves asymmetric provider choices and preserves explicit values", () => {
     expect(resolveEffortPreset(presets, "low", providers)).toEqual({
       _tag: "Available",
@@ -171,5 +211,30 @@ describe("sameEffortSelection", () => {
         ],
       }),
     ).toBe(false);
+  });
+
+  it("compares specialist names, providers, models, and options independently of ordering", () => {
+    const configured = {
+      ...selection,
+      specialistModels: { oracle: presets.high, critic: presets.low },
+    };
+    expect(
+      sameEffortSelection(configured, {
+        ...selection,
+        specialistModels: { critic: presets.low, oracle: presets.high },
+      }),
+    ).toBe(true);
+    for (const specialistModels of [
+      {},
+      { librarian: presets.high, critic: presets.low },
+      { oracle: presets.low, critic: presets.low },
+      { oracle: { ...presets.high, model: "different" }, critic: presets.low },
+      {
+        oracle: { ...presets.high, options: [{ id: "thinking", value: false }] },
+        critic: presets.low,
+      },
+    ]) {
+      expect(sameEffortSelection(configured, { ...selection, specialistModels })).toBe(false);
+    }
   });
 });
