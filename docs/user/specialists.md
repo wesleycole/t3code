@@ -4,13 +4,29 @@ Give your agent named specialists for focused reviews, research, or implementati
 Each specialist uses its own model and conversation, while working in the same
 checkout as the parent. Its answer returns to the parent as a tool result.
 
+## Starter specialists
+
+This fork includes three project-local definitions in
+[`.agents/specialists/`](../../.agents/specialists/):
+
+| Specialist | Use it for                                                                          | Default model                  |
+| ---------- | ----------------------------------------------------------------------------------- | ------------------------------ |
+| Oracle     | Architecture decisions, difficult debugging, and uncertain invariants               | GPT-5.6-Sol, high reasoning    |
+| Librarian  | Understanding existing code and researching dependencies from authoritative sources | GPT-5.6-Luna, medium reasoning |
+| Critic     | Reviewing a specific diff for concrete bugs and regressions                         | GPT-5.6-Sol, high reasoning    |
+
+All three use the default Codex instance and are read-only by instruction. Change
+their frontmatter to use models available to your account. To use them in another
+project, copy the definitions into that project's `.agents/specialists/` directory;
+they are not automatically installed into every project.
+
 ## Create a specialist
 
 Add a Markdown file under your project's `.agents/specialists/` directory:
 
 ```markdown
 ---
-name: reviewer
+name: critic
 description: Review current changes for concrete correctness bugs before shipping.
 providerInstance: codex
 model: gpt-5.6-sol
@@ -41,8 +57,8 @@ specialist conversations retain their original role instructions.
 
 ## Use a specialist
 
-Ask your agent: “Use the reviewer specialist to review these changes.” It receives
-a `specialist_reviewer` tool and instructions for writing a self-contained assignment:
+Ask your agent: “Use Critic to review these changes.” It receives
+a `specialist_critic` tool and instructions for writing a self-contained assignment:
 the outcome, evidence and file references, constraints, edit authorization, ownership
 of concurrent work, and the expected answer. The specialist does not see the parent
 conversation automatically. Its role instructions and the assignment stay separate.
