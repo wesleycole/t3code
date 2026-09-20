@@ -95,7 +95,7 @@ export function EffortDial({
       <PopoverTrigger
         render={<Button variant="ghost" size="sm" disabled={disabled} />}
         aria-label={`Effort: ${EFFORT_PRESET_LABELS[preset]}`}
-        className="w-24 shrink-0 justify-start gap-1.5"
+        className="w-24 shrink-0 justify-center gap-1.5 [&_svg]:mx-0"
       >
         <GaugeIcon className="size-4" />
         {EFFORT_PRESET_LABELS[preset]}
