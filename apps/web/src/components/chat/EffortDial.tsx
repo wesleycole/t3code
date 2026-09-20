@@ -7,6 +7,7 @@ import {
   type ServerProvider,
 } from "@t3tools/contracts";
 import { resolveEffortPreset } from "@t3tools/shared/effortPresets";
+import { getProviderOptionCurrentLabel, getProviderOptionDescriptors } from "@t3tools/shared/model";
 import { GaugeIcon, LockKeyholeIcon } from "lucide-react";
 import type { PointerEvent } from "react";
 
@@ -15,6 +16,7 @@ import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useComposerMenuProps } from "./composerEventScope";
 import { cn } from "../../lib/utils";
+import styles from "./EffortDial.module.css";
 
 /** New-conversation effort selector; saved conversations expose only their frozen selection. */
 export function EffortDial({
@@ -61,6 +63,17 @@ export function EffortDial({
 
   const index = EFFORT_PRESETS.indexOf(preset);
   const resolution = resolveEffortPreset(presets, preset, providers);
+  const configured = presets[preset];
+  const model = providers
+    .find((provider) => provider.instanceId === configured.instanceId)
+    ?.models.find((entry) => entry.slug === configured.model);
+  const options = getProviderOptionDescriptors({
+    caps: model?.capabilities ?? {},
+    selections: resolution._tag === "Available" ? resolution.selection.options : configured.options,
+  }).flatMap((descriptor) => {
+    const value = getProviderOptionCurrentLabel(descriptor);
+    return value ? [{ id: descriptor.id, label: descriptor.label, value }] : [];
+  });
   const chooseIndex = (next: number) => {
     const choice = EFFORT_PRESETS[Math.max(0, Math.min(3, next))];
     if (choice) onChange(choice);
@@ -91,76 +104,139 @@ export function EffortDial({
         {...composerFloatingLayerProps}
         side="top"
         align="start"
-        className="w-80 max-w-[calc(100vw-2rem)] bg-popover!"
+        className="w-[560px] max-w-[calc(100vw-2rem)] bg-popover!"
+        viewportClassName="p-3"
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1">
           <span className="text-sm font-medium">Conversation effort</span>
           <span className="text-xs text-muted-foreground">Locks on first send</span>
         </div>
-        <div className="relative mx-auto my-5 size-36">
-          <svg
-            viewBox="0 0 144 144"
-            className="pointer-events-none absolute inset-0 size-full"
-            aria-hidden="true"
-          >
-            {EFFORT_PRESETS.map((level, position) => (
-              <line
-                key={level}
-                x1="72"
-                y1="4"
-                x2="72"
-                y2="13"
-                transform={`rotate(${-120 + position * 80} 72 72)`}
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-                className={position <= index ? "text-primary" : "text-muted-foreground/35"}
-              />
-            ))}
-          </svg>
-          <div
-            role="slider"
-            aria-label="Conversation effort"
-            aria-valuemin={0}
-            aria-valuemax={3}
-            aria-valuenow={index}
-            aria-valuetext={EFFORT_PRESET_LABELS[preset]}
-            tabIndex={0}
-            className="absolute inset-5 touch-none cursor-grab rounded-full border border-border bg-muted shadow-[0_4px_8px_rgb(0_0_0/12%)] outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
-            onPointerDown={(event) => {
-              event.currentTarget.setPointerCapture(event.pointerId);
-              turnDial(event);
-            }}
-            onPointerMove={(event) => {
-              if (event.currentTarget.hasPointerCapture(event.pointerId)) turnDial(event);
-            }}
-            onPointerUp={(event) => event.currentTarget.releasePointerCapture(event.pointerId)}
-            onKeyDown={(event) => {
-              if (
-                !["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowUp", "Home", "End"].includes(
-                  event.key,
-                )
-              )
-                return;
-              event.preventDefault();
-              chooseIndex(
-                event.key === "Home"
-                  ? 0
-                  : event.key === "End"
-                    ? 3
-                    : index + (["ArrowLeft", "ArrowDown"].includes(event.key) ? -1 : 1),
-              );
-            }}
-          >
+        <div className={styles.console}>
+          {[0, 1, 2, 3].map((screw) => (
+            <span key={screw} className={styles.screw} aria-hidden="true" />
+          ))}
+          <div className={styles.controls}>
+            <div className={styles.dial}>
+              <svg viewBox="0 0 252 248" className={styles.scale} aria-hidden="true">
+                {Array.from({ length: 25 }, (_, tick) => (
+                  <line
+                    key={tick}
+                    x1="126"
+                    y1="38"
+                    x2="126"
+                    y2={tick % 8 === 0 ? "49" : "44"}
+                    transform={`rotate(${-120 + tick * 10} 126 132)`}
+                    strokeWidth={tick % 8 === 0 ? 3 : 1.5}
+                    strokeLinecap="round"
+                    className={cn(styles.tick, tick <= index * 8 && styles.tickActive)}
+                  />
+                ))}
+              </svg>
+              {EFFORT_PRESETS.map((level, position) => {
+                const angle = ((-120 + position * 80) * Math.PI) / 180;
+                return (
+                  <button
+                    key={level}
+                    type="button"
+                    tabIndex={-1}
+                    aria-label={`Set ${EFFORT_PRESET_LABELS[level]} effort`}
+                    aria-pressed={level === preset}
+                    className={styles.dialLabel}
+                    style={{
+                      left: `${126 + Math.sin(angle) * 111}px`,
+                      top: `${124 - Math.cos(angle) * 111}px`,
+                    }}
+                    onClick={() => onChange(level)}
+                  >
+                    {level === "medium" ? "Med" : level}
+                    <span className={styles.led} aria-hidden="true" />
+                  </button>
+                );
+              })}
+              <div
+                role="slider"
+                aria-label="Conversation effort"
+                aria-valuemin={0}
+                aria-valuemax={3}
+                aria-valuenow={index}
+                aria-valuetext={EFFORT_PRESET_LABELS[preset]}
+                tabIndex={0}
+                className={styles.knob}
+                onPointerDown={(event) => {
+                  event.currentTarget.focus();
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  turnDial(event);
+                }}
+                onPointerMove={(event) => {
+                  if (event.currentTarget.hasPointerCapture(event.pointerId)) turnDial(event);
+                }}
+                onPointerUp={(event) => event.currentTarget.releasePointerCapture(event.pointerId)}
+                onKeyDown={(event) => {
+                  if (
+                    !["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowUp", "Home", "End"].includes(
+                      event.key,
+                    )
+                  )
+                    return;
+                  event.preventDefault();
+                  chooseIndex(
+                    event.key === "Home"
+                      ? 0
+                      : event.key === "End"
+                        ? 3
+                        : index + (["ArrowLeft", "ArrowDown"].includes(event.key) ? -1 : 1),
+                  );
+                }}
+              >
+                <div className={styles.grip} aria-hidden="true">
+                  <div className={styles.face} />
+                  <div
+                    className={styles.needle}
+                    style={{ transform: `rotate(${-120 + index * 80}deg)` }}
+                  />
+                </div>
+              </div>
+            </div>
             <div
-              className="pointer-events-none absolute inset-2"
-              style={{ transform: `rotate(${-120 + index * 80}deg)` }}
+              className={styles.readout}
+              data-unavailable={resolution._tag === "Unavailable" || undefined}
+              aria-live="polite"
             >
-              <span className="absolute top-0 left-1/2 h-6 w-1 -translate-x-1/2 rounded-full bg-primary" />
+              <div className={styles.bezel}>
+                <dl className={styles.screen}>
+                  <div className={styles.model}>
+                    <dt>Agent</dt>
+                    <dd>
+                      {resolution._tag === "Available" ? resolution.modelName : configured.model}
+                    </dd>
+                  </div>
+                  {options.length > 0 ? (
+                    options.map((option) => (
+                      <div key={option.id} className={styles.option}>
+                        <dt>{option.label}</dt>
+                        <dd>{option.value}</dd>
+                      </div>
+                    ))
+                  ) : (
+                    <div className={styles.option}>
+                      <dt>Options</dt>
+                      <dd>Provider defaults</dd>
+                    </div>
+                  )}
+                  <div className={styles.provider}>
+                    <dt>Provider</dt>
+                    <dd>{configured.instanceId}</dd>
+                  </div>
+                </dl>
+              </div>
+              <div className={styles.status}>
+                <span className={styles.led} aria-hidden="true" />
+                {resolution._tag === "Available" ? "Preset ready" : "Setup required"}
+              </div>
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-1" role="group" aria-label="Effort presets">
+        <div className="mt-3 grid grid-cols-4 gap-1" role="group" aria-label="Effort presets">
           {EFFORT_PRESETS.map((level) => (
             <Button
               key={level}
@@ -174,14 +250,11 @@ export function EffortDial({
             </Button>
           ))}
         </div>
-        <div className="mt-4 border-t pt-3" aria-live="polite">
-          <p className="text-sm font-medium">
-            {resolution._tag === "Available" ? resolution.modelName : presets[preset].model}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
+        <div className="mt-3 border-t px-1 pt-3" aria-live="polite">
+          <p className="text-xs text-muted-foreground">
             {resolution._tag === "Unavailable"
               ? resolution.reason
-              : `${presets[preset].instanceId} · Configure presets in Settings → General.`}
+              : "Configure presets in Settings → General."}
           </p>
         </div>
       </PopoverPopup>
