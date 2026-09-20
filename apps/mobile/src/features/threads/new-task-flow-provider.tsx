@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type {
   EnvironmentId,
+  EffortPreset,
   ModelSelection,
   ProjectReadFileResult,
   ProviderInteractionMode,
@@ -35,8 +36,6 @@ import {
   buildModelOptions,
   groupByProvider,
   resolveDefaultableModelSelection,
-  resolveNewTaskModelSelection,
-  resolveSelectableModelSelection,
 } from "../../lib/modelOptions";
 import { scopedProjectKey } from "../../lib/scopedEntities";
 import { appAtomRegistry } from "../../state/atom-registry";
@@ -101,6 +100,7 @@ import {
 } from "./new-task-context-presentation";
 import { resolveEnvironmentProjectMatch } from "./new-task-project-selection";
 import { resolveProjectThreadCreationBranch } from "./projectThreadCreationValidation";
+import { buildEffortPresetOptions, type EffortPresetOption } from "./effort-preset-options";
 
 type WorkspaceMode = "local" | "worktree";
 
@@ -172,6 +172,8 @@ type NewTaskFlowContextValue = {
   readonly modelOptions: ReadonlyArray<ModelOption>;
   readonly selectedModel: ModelSelection | null;
   readonly selectedModelOption: ModelOption | null;
+  readonly effortPresetOptions: ReadonlyArray<EffortPresetOption>;
+  readonly selectedEffortPreset: EffortPreset;
   readonly selectedProviderStatus: ServerProvider | null;
   readonly providerGroups: ReadonlyArray<ProviderGroup>;
   readonly filteredBranches: ReadonlyArray<VcsRef>;
@@ -188,6 +190,7 @@ type NewTaskFlowContextValue = {
     key: string | null,
     options?: ReadonlyArray<ProviderOptionSelection>,
   ) => void;
+  readonly setEffortPreset: (preset: EffortPreset) => void;
   readonly setWorkspaceMode: (mode: WorkspaceMode) => void;
   readonly selectBranch: (branch: VcsRef) => void;
   readonly setStartFromOrigin: (value: boolean) => void;
@@ -477,13 +480,24 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     : projectSettings.settings.defaultRuntimeMode;
   const runtimeMode = selectedProjectDraft.runtimeMode ?? defaultRuntimeMode;
 
+  const effortPresetOptions = useMemo(
+    () =>
+      buildEffortPresetOptions(
+        projectSettings.settings.effortPresets,
+        selectedEnvironmentServerConfig?.providers ?? [],
+      ),
+    [projectSettings.settings.effortPresets, selectedEnvironmentServerConfig?.providers],
+  );
+  const selectedEffortPreset =
+    selectedProjectDraft.modelSelection?.effortPreset ??
+    projectSettings.settings.defaultEffortPreset;
+  const resolvedEffortSelection =
+    effortPresetOptions.find((option) => option.preset === selectedEffortPreset)?.selection ?? null;
+
   // Antigravity keeps unavailable selections so sign-out or a catalog change
   // cannot switch the user's model. Other providers retain their fallback
   // rules. Implicit defaults also exclude legacy models for those providers.
-  const draftModelSelection = resolveSelectableModelSelection(
-    selectedEnvironmentServerConfig,
-    selectedProjectDraft.modelSelection ?? null,
-  );
+  const draftModelSelection = selectedProjectDraft.modelSelection ?? null;
   const projectDefaultModelSelection = resolveDefaultableModelSelection(
     selectedEnvironmentServerConfig,
     projectSettings.settings.defaultModelSelection,
@@ -509,12 +523,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
 
   // An unsent draft keeps its explicit pick. Fresh drafts resolve the project
   // default before the last manual app-wide selection and provider default.
-  const selectedModel = resolveNewTaskModelSelection({
-    draftSelection: draftModelSelection,
-    projectDefaultSelection: projectDefaultModelSelection,
-    stickySelection: stickyModelSelection,
-    modelOptions,
-  });
+  const selectedModel = draftModelSelection ?? resolvedEffortSelection;
   const selectedModelKey = selectedModel
     ? `${selectedModel.instanceId}:${selectedModel.model}`
     : null;
@@ -580,6 +589,15 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       setStickyComposerModelSelection(nextSelection);
     },
     [selectedModel, selectedProjectDraftKey],
+  );
+  const setEffortPreset = useCallback(
+    (preset: EffortPreset) => {
+      if (!selectedProjectDraftKey) return;
+      const selection = effortPresetOptions.find((option) => option.preset === preset)?.selection;
+      if (!selection) return;
+      updateComposerDraftSettings(selectedProjectDraftKey, { modelSelection: selection });
+    },
+    [effortPresetOptions, selectedProjectDraftKey],
   );
 
   const providerGroups = useMemo(() => groupByProvider(modelOptions), [modelOptions]);
@@ -962,11 +980,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       const text = draft.text.trim();
       // Use the displayed selection rules without substituting an unavailable
       // Antigravity model while the task is queued.
-      const draftModelSelection =
-        resolveSelectableModelSelection(
-          selectedEnvironmentServerConfig,
-          draft.modelSelection ?? null,
-        ) ?? selectedModel;
+      const draftModelSelection = draft.modelSelection ?? selectedModel;
       if (text.length === 0 || !draftModelSelection) {
         return null;
       }
@@ -1177,6 +1191,8 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       modelOptions,
       selectedModel,
       selectedModelOption,
+      effortPresetOptions,
+      selectedEffortPreset,
       selectedProviderStatus,
       providerGroups,
       filteredBranches,
@@ -1185,6 +1201,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       openDraft,
       selectEnvironment,
       setSelectedModelKey,
+      setEffortPreset,
       setWorkspaceMode,
       selectBranch,
       setStartFromOrigin,
@@ -1220,6 +1237,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       editingPendingTask,
       environments,
       expandedProvider,
+      effortPresetOptions,
       filteredBranches,
       finishEditingPendingTask,
       interactionMode,
@@ -1239,6 +1257,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       selectedModel,
       selectedModelKey,
       selectedModelOption,
+      selectedEffortPreset,
       selectedProjectDraftKey,
       selectedProviderStatus,
       setSelectedModelOptions,
@@ -1253,6 +1272,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       setPrompt,
       setRuntimeMode,
       setSelectedModelKey,
+      setEffortPreset,
       setStartFromOrigin,
       setWorkspaceMode,
       startFromOrigin,

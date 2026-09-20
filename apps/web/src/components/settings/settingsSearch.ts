@@ -60,7 +60,7 @@ export interface SettingsSearchItem {
   readonly wslAvailableOnly?: boolean;
   /**
    * Sorts after every other match. Keybinding commands mirror rows on other
-   * surfaces, so "model" must still lead with Default model, not Model Picker.
+   * surfaces, so "model" must still lead with a model setting, not Model Picker.
    */
   readonly secondary?: boolean;
   readonly requiresThreadAutoSettlement?: boolean;
@@ -157,11 +157,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["name icon emoji image checkout remove delete"],
   },
   {
-    id: "default-model",
-    title: "Default model",
+    id: "effort-presets",
+    title: "Effort presets",
     to: "/settings/general",
-    scope: "project-defaults",
-    searchTerms: ["new thread project provider reasoning effort"],
+    scope: "environment-defaults",
+    searchTerms: ["new conversation default model provider reasoning dial low medium high ultra"],
+  },
+  {
+    id: "default-effort-preset",
+    title: "Default effort",
+    to: "/settings/general",
+    scope: "environment-defaults",
+    searchTerms: ["new conversation preset dial low medium high ultra"],
   },
   {
     id: "default-permissions",

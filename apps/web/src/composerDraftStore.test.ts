@@ -2293,6 +2293,33 @@ describe("composerDraftStore setModelSelection", () => {
     resetComposerDraftStore();
   });
 
+  it("preserves preset identity when replacing a draft with an option-free snapshot", () => {
+    const store = useComposerDraftStore.getState();
+    store.setModelSelection(
+      threadRef,
+      {
+        instanceId: CODEX_INSTANCE,
+        model: "gpt-6-astra",
+        effortPreset: "ultra",
+        options: [{ id: "reasoningEffort", value: "xhigh" }],
+      },
+      { explicit: true, replaceOptions: true },
+    );
+    store.setModelSelection(
+      threadRef,
+      {
+        instanceId: CODEX_INSTANCE,
+        model: "gpt-5.6-sol",
+        effortPreset: "low",
+      },
+      { explicit: true, replaceOptions: true },
+    );
+
+    expect(
+      draftFor(threadId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider[CODEX_INSTANCE],
+    ).toEqual({ instanceId: CODEX_INSTANCE, model: "gpt-5.6-sol", effortPreset: "low" });
+  });
+
   it("keeps explicit model overrides instead of coercing to null", () => {
     const store = useComposerDraftStore.getState();
 

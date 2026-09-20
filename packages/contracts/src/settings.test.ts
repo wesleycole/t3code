@@ -106,6 +106,28 @@ describe("ServerSettings default permissions", () => {
   });
 });
 
+describe("ServerSettings effort presets", () => {
+  it("supplies the four legacy-compatible defaults", () => {
+    const settings = decodeServerSettings({});
+    expect(settings.defaultEffortPreset).toBe("medium");
+    expect(settings.effortPresets).toEqual(DEFAULT_SERVER_SETTINGS.effortPresets);
+    expect(Object.keys(settings.effortPresets)).toEqual(["low", "medium", "high", "ultra"]);
+  });
+
+  it("round-trips complete preset updates and exposes them through patches", () => {
+    const effortPresets = {
+      low: { instanceId: ProviderInstanceId.make("codex"), model: "sol" },
+      medium: { instanceId: ProviderInstanceId.make("codex"), model: "astra" },
+      high: { instanceId: ProviderInstanceId.make("claudeAgent"), model: "fable" },
+      ultra: { instanceId: ProviderInstanceId.make("claudeAgent"), model: "opus" },
+    };
+    const input = { effortPresets, defaultEffortPreset: "high" as const };
+
+    expect(encodeServerSettings(decodeServerSettings(input))).toMatchObject(input);
+    expect(decodeServerSettingsPatch(input)).toEqual(input);
+  });
+});
+
 describe("ServerSettings usage price overrides", () => {
   const prices = { inputCostPerMillionTokens: 2, outputCostPerMillionTokens: 8 };
 

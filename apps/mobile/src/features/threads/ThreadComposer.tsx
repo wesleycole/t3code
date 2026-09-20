@@ -942,16 +942,22 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                     />
                     <View className="min-w-0 shrink">
                       <ComposerInlineControl
-                        accessibilityLabel="Model and reasoning settings"
+                        accessibilityLabel={`Conversation model: ${currentModelOption?.label ?? currentModelSelection.model}`}
                         emphasized
                         iconNode={
                           <ProviderIcon provider={currentModelOption?.providerDriver} size={16} />
                         }
                         label={currentModelOption?.label ?? currentModelSelection.model}
                         maxWidth="100%"
-                        onPress={openSettings}
+                        static
                       />
                     </View>
+                    <ComposerInlineControl
+                      accessibilityLabel="Permission settings"
+                      icon="gearshape"
+                      label="Permissions"
+                      onPress={openSettings}
+                    />
                   </View>
                 )}
                 <View className="shrink-0 flex-row items-center">

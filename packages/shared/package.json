@@ -31,6 +31,10 @@
       "types": "./src/model.ts",
       "import": "./src/model.ts"
     },
+    "./effortPresets": {
+      "types": "./src/effortPresets.ts",
+      "import": "./src/effortPresets.ts"
+    },
     "./advertisedEndpoint": {
       "types": "./src/advertisedEndpoint.ts",
       "import": "./src/advertisedEndpoint.ts"

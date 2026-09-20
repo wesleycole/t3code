@@ -89,6 +89,7 @@ import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import * as NetAddress from "effect/unstable/net/NetAddress";
 import * as Socket from "effect/unstable/socket/Socket";
 import { vi } from "vite-plus/test";
+import { OrchestrationCommandReceiptRepository } from "./persistence/Services/OrchestrationCommandReceipts.ts";
 
 const TEST_EPOCH = DateTime.makeUnsafe("1970-01-01T00:00:00.000Z");
 const SUCCESSFUL_GIT_EXECUTION = {
@@ -540,6 +541,7 @@ const buildAppUnderTest = (options?: {
     >;
     terminalManager?: Partial<TerminalManager.TerminalManager["Service"]>;
     orchestrationEngine?: Partial<OrchestrationEngine.OrchestrationEngineService["Service"]>;
+    commandReceipts?: Partial<OrchestrationCommandReceiptRepository["Service"]>;
     threadDeletionReactor?: Partial<ThreadDeletionReactor["Service"]>;
     analyticsService?: Partial<AnalyticsService.AnalyticsService["Service"]>;
     projectionSnapshotQuery?: Partial<ProjectionSnapshotQuery.ProjectionSnapshotQuery["Service"]>;
@@ -988,6 +990,11 @@ const buildAppUnderTest = (options?: {
             streamDomainEvents: Stream.empty,
             latestSequence: Effect.succeed(0),
             ...options?.layers?.orchestrationEngine,
+          }),
+          Layer.mock(OrchestrationCommandReceiptRepository)({
+            getByCommandId: () => Effect.succeed(Option.none()),
+            upsert: () => Effect.void,
+            ...options?.layers?.commandReceipts,
           }),
           Layer.mock(ThreadDeletionReactor)({
             start: () => Effect.void,
@@ -11067,6 +11074,98 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           assert.equal(finalCommand.bootstrap, undefined);
         }
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect.each([
+    { caseName: "has only a projected thread", acceptedReceipt: false },
+    { caseName: "has an accepted final-command receipt", acceptedReceipt: true },
+  ])("bootstrap retry routing when it $caseName", ({ acceptedReceipt }) =>
+    Effect.gen(function* () {
+      const dispatchedCommands: Array<OrchestrationCommand> = [];
+      const threadId = ThreadId.make(
+        `bootstrap-retry-${acceptedReceipt ? "accepted" : "incomplete"}`,
+      );
+      const commandId = CommandId.make(
+        `bootstrap-retry-${acceptedReceipt ? "accepted" : "incomplete"}`,
+      );
+      yield* buildAppUnderTest({
+        layers: {
+          commandReceipts: {
+            getByCommandId: () =>
+              Effect.succeed(
+                acceptedReceipt
+                  ? Option.some({
+                      commandId,
+                      aggregateKind: "thread",
+                      aggregateId: threadId,
+                      acceptedAt: "2026-01-01T00:00:00.000Z",
+                      resultSequence: 42,
+                      status: "accepted",
+                      error: null,
+                    })
+                  : Option.none(),
+              ),
+          },
+          projectionSnapshotQuery: {
+            getThreadShellById: () =>
+              Effect.succeed(Option.some(makeDefaultOrchestrationThreadShell({ id: threadId }))),
+          },
+          orchestrationEngine: {
+            dispatch: (command) =>
+              Effect.sync(() => {
+                dispatchedCommands.push(command);
+                return { sequence: acceptedReceipt ? 42 : dispatchedCommands.length };
+              }),
+          },
+        },
+      });
+
+      const createdAt = "2026-01-01T00:00:00.000Z";
+      const wsUrl = yield* getWsServerUrl("/ws");
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+            type: "thread.turn.start",
+            commandId,
+            threadId,
+            message: {
+              messageId: MessageId.make(`message-${threadId}`),
+              role: "user",
+              text: "retry",
+              attachments: [],
+            },
+            modelSelection: defaultModelSelection,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            bootstrap: {
+              createThread: {
+                projectId: defaultProjectId,
+                title: "Retry",
+                modelSelection: defaultModelSelection,
+                runtimeMode: "full-access",
+                interactionMode: "default",
+                branch: null,
+                worktreePath: null,
+                createdAt,
+              },
+            },
+            createdAt,
+          }),
+        ),
+      );
+
+      assert.deepEqual(
+        dispatchedCommands.map((command) => command.type),
+        acceptedReceipt
+          ? ["thread.turn.start"]
+          : ["thread.create", "thread.message.user.append", "thread.turn.start"],
+      );
+      assertTrue(
+        dispatchedCommands.every(
+          (command) => command.type !== "thread.turn.start" || command.bootstrap === undefined,
+        ),
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect.each([

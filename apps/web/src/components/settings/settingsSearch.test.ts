@@ -228,7 +228,7 @@ describe("searchSettings", () => {
 
   it("ranks keybinding commands after other settings", () => {
     const ids = searchSettings("model").map((item) => item.id);
-    expect(ids[0]).toBe("default-model");
+    expect(ids[0]).toBe("text-generation-model");
     expect(ids.indexOf("keybinding-modelPicker.toggle")).toBeGreaterThan(
       ids.indexOf("text-generation-model"),
     );
@@ -315,7 +315,8 @@ describe("searchSettings", () => {
   });
 
   it.each([
-    ["default model", "default-model", "/settings/general"],
+    ["effort presets", "effort-presets", "/settings/general"],
+    ["default effort", "default-effort-preset", "/settings/general"],
     ["new threads", "new-threads", "/settings/general"],
     ["agent browser access", "agent-browser-access", "/settings/integrations"],
     ["automatically pull", "automatic-pull", "/settings/source-control"],
