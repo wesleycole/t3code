@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Toolchains and dependencies survive in the snapshot. SQLite has no daemon to
+# restart, and provider authentication belongs to the current user, not setup.
+printf '[orb-resume] Cached toolchains and dependencies are ready.\n'

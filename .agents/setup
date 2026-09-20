@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+export CI=true
+export VP_BIN_DIR="$HOME/.local/share/vite-plus/bin"
+export VP_DATA_DIR="$HOME/.local/share/vite-plus"
+export VP_CACHE_DIR="$HOME/.cache/vite-plus"
+export PATH="$HOME/.local/share/t3code-node/bin:$VP_BIN_DIR:$HOME/.cargo/bin:$PATH"
+
+step() {
+  local label="$1" started=$SECONDS
+  shift
+  printf '\n[orb-setup] %s\n' "$label"
+  "$@"
+  printf '[orb-setup] %s finished in %ss\n' "$label" "$((SECONDS - started))"
+}
+
+install_system_packages() {
+  local package
+  local missing=()
+  for package in ca-certificates curl xz-utils build-essential python3 pkg-config libsecret-1-dev; do
+    if [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)" != "install ok installed" ]]; then
+      missing+=("$package")
+    fi
+  done
+  if ((${#missing[@]})); then
+    sudo apt-get update -qq
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+  fi
+}
+
+install_toolchains() (
+  local node_version package_manager temporary architecture
+  node_version=$(node -p 'require("./package.json").engines.node.replace(/^\^/, "")')
+  package_manager=$(node -p 'require("./package.json").packageManager')
+  temporary=$(mktemp -d)
+  trap 'rm -rf -- "$temporary"' EXIT
+
+  if [[ "$(node --version)" != "v$node_version" ]]; then
+    case "$(uname -m)" in
+      x86_64) architecture=x64 ;;
+      aarch64) architecture=arm64 ;;
+      *) printf 'Unsupported Node architecture\n' >&2; return 1 ;;
+    esac
+    local archive="node-v$node_version-linux-$architecture.tar.xz"
+    curl -fsSL "https://nodejs.org/dist/v$node_version/$archive" -o "$temporary/$archive"
+    curl -fsSL "https://nodejs.org/dist/v$node_version/SHASUMS256.txt" -o "$temporary/SHASUMS256.txt"
+    (cd "$temporary"; grep "  $archive\$" SHASUMS256.txt | sha256sum --check)
+    mkdir -p "$HOME/.local/share/t3code-node"
+    tar -xJf "$temporary/$archive" --strip-components=1 -C "$HOME/.local/share/t3code-node"
+    hash -r
+  fi
+
+  if [[ "$(pnpm --version 2>/dev/null || true)" != "${package_manager#pnpm@}" ]]; then
+    npm install --global --prefix "$HOME/.local/share/t3code-node" "$package_manager"
+  fi
+  if [[ ! -x "$VP_BIN_DIR/vp" ]]; then
+    curl -fsSL https://vite.plus -o "$temporary/install-vp.sh"
+    VP_NODE_MANAGER=no bash "$temporary/install-vp.sh"
+  fi
+  if ! command -v rustc >/dev/null; then
+    curl -fsSL https://sh.rustup.rs -o "$temporary/install-rust.sh"
+    bash "$temporary/install-rust.sh" -y --no-modify-path --profile minimal --default-toolchain stable
+  fi
+  rustup component add rustfmt
+
+  # Amp and supervised services start separate login shells after setup exits.
+  local marker='# T3 Code orb toolchains'
+  if ! grep -Fqx "$marker" "$HOME/.bash_profile" 2>/dev/null; then
+    cat >> "$HOME/.bash_profile" <<'EOF'
+
+# T3 Code orb toolchains
+export PATH="$HOME/.local/share/t3code-node/bin:$HOME/.local/share/vite-plus/bin:$HOME/.cargo/bin:$PATH"
+EOF
+  fi
+  node --version
+  pnpm --version
+  vp --version
+  rustc --version
+)
+
+step 'System build prerequisites' install_system_packages
+step 'Node, pnpm, Vite+, and Rust toolchains' install_toolchains
+step 'Locked workspace dependencies' vp install --frozen-lockfile
+step 'Electron runtime' vp run --filter @t3tools/desktop ensure:electron
+step 'Web dependency cache' node apps/web/scripts/warm-dep-cache.ts
+
+# SQLite needs no daemon. Do not seed user state, copy the production cloud
+# configuration from .env.example, or authenticate providers into a shared snapshot.
+printf '\n[orb-setup] Ready. Start development services separately when needed.\n'
