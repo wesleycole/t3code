@@ -64,10 +64,11 @@ export function EffortDial({
         <TooltipTrigger
           render={<span tabIndex={0} />}
           className="inline-flex min-w-0 items-center gap-1.5 px-2 text-xs text-muted-foreground"
+          data-chat-provider-model-picker="true"
           data-testid="locked-effort"
         >
           <LockKeyholeIcon className="size-3.5 shrink-0" />
-          <span className="truncate">
+          <span className="truncate" data-chat-provider-model-picker-label="true">
             {lockedSelection.effortPreset
               ? `${EFFORT_PRESET_LABELS[lockedSelection.effortPreset]} · ${lockedSelection.model}`
               : lockedSelection.model}
@@ -115,7 +116,8 @@ export function EffortDial({
       <PopoverTrigger
         render={<Button variant="ghost" size="sm" disabled={disabled} />}
         aria-label={`Effort: ${EFFORT_PRESET_LABELS[preset]}`}
-        className="w-24 shrink-0 justify-center gap-1.5 [&_svg]:mx-0"
+        data-chat-provider-model-picker="true"
+        className="w-24 min-w-24 shrink-0 justify-center gap-1.5 [&_svg]:mx-0"
       >
         <GaugeIcon className="size-4" />
         {EFFORT_PRESET_LABELS[preset]}
