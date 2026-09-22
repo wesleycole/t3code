@@ -145,7 +145,7 @@ export interface ProjectionSnapshotQueryShape {
   >;
 
   /**
-   * Search active thread navigation metadata, user messages, and canonical
+   * Search scoped thread navigation metadata, user messages, and canonical
    * assistant outputs without hydrating thread detail snapshots.
    */
   readonly searchThreads: (

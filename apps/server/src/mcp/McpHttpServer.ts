@@ -40,6 +40,8 @@ import {
 } from "./toolkits/preview/tools.ts";
 import { PullRequestsToolkitHandlersLive } from "./toolkits/pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
+import { ConversationsToolkitHandlersLive } from "./toolkits/conversations/handlers.ts";
+import { ConversationsToolkit } from "./toolkits/conversations/tools.ts";
 import {
   DeviceScreenshotToolkitHandlersLive,
   DeviceStandardToolkitHandlersLive,
@@ -571,6 +573,10 @@ export const PullRequestsToolkitRegistrationLive = McpServer.toolkit(PullRequest
   Layer.provide(PullRequestsToolkitHandlersLive),
 );
 
+export const ConversationsToolkitRegistrationLive = McpServer.toolkit(ConversationsToolkit).pipe(
+  Layer.provide(ConversationsToolkitHandlersLive),
+);
+
 const DeviceStandardToolkitRegistrationLive = McpServer.toolkit(DeviceStandardToolkit).pipe(
   Layer.provide(DeviceStandardToolkitHandlersLive),
 );
@@ -608,6 +614,7 @@ export const layer = Layer.effectDiscard(
               Layer.mergeAll(
                 PreviewToolkitRegistrationLive,
                 PullRequestsToolkitRegistrationLive,
+                ConversationsToolkitRegistrationLive,
                 DeviceToolkitRegistrationLive,
                 specialistToolsLayer(invocation.threadId),
               ).pipe(

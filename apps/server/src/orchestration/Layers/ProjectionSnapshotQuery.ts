@@ -190,6 +190,9 @@ const EventReplayStatsRowSchema = Schema.Struct({
 const ProjectionThreadSearchRequest = Schema.Struct({
   pattern: Schema.String,
   limit: Schema.Int,
+  offset: NonNegativeInt,
+  scope: Schema.Literals(["active", "archived", "all"]),
+  projectId: Schema.NullOr(ProjectId),
 });
 const ProjectionThreadSearchRow = Schema.Struct({
   threadId: ThreadId,
@@ -197,6 +200,10 @@ const ProjectionThreadSearchRow = Schema.Struct({
   source: OrchestrationThreadSearchSource,
   matchText: Schema.String,
   messageCreatedAt: Schema.NullOr(IsoDateTime),
+  title: Schema.String,
+  projectTitle: Schema.String,
+  updatedAt: IsoDateTime,
+  archivedAt: Schema.NullOr(IsoDateTime),
 });
 const WorkspaceRootLookupInput = Schema.Struct({
   workspaceRoot: Schema.String,
@@ -1061,12 +1068,15 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
   const searchActiveThreadRows = SqlSchema.findAll({
     Request: ProjectionThreadSearchRequest,
     Result: ProjectionThreadSearchRow,
-    execute: ({ pattern, limit }) =>
+    execute: ({ pattern, limit, offset, scope, projectId }) =>
       sql`
         WITH ranked AS (
           SELECT
             threads.thread_id AS thread_id,
             threads.project_id AS project_id,
+            threads.title AS title,
+            projects.title AS project_title,
+            threads.archived_at AS archived_at,
             CASE messages.role
               WHEN 'user' THEN 'user'
               ELSE 'assistant'
@@ -1094,7 +1104,10 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           INNER JOIN projection_projects AS projects
             ON projects.project_id = threads.project_id
           WHERE threads.deleted_at IS NULL
-            AND threads.archived_at IS NULL
+            AND (${scope} = 'all'
+              OR (${scope} = 'active' AND threads.archived_at IS NULL)
+              OR (${scope} = 'archived' AND threads.archived_at IS NOT NULL))
+            AND (${projectId} IS NULL OR threads.project_id = ${projectId})
             AND projects.deleted_at IS NULL
             AND messages.is_streaming = 0
             -- Only these two roles are searchable, and the CASE above depends
@@ -1119,7 +1132,11 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           project_id AS "projectId",
           source,
           match_text AS "matchText",
-          message_created_at AS "messageCreatedAt"
+          message_created_at AS "messageCreatedAt",
+          title,
+          project_title AS "projectTitle",
+          thread_updated_at AS "updatedAt",
+          archived_at AS "archivedAt"
         FROM ranked
         WHERE thread_match_rank = 1
         ORDER BY
@@ -1127,6 +1144,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           thread_updated_at DESC,
           thread_id ASC
         LIMIT ${limit}
+        OFFSET ${offset}
       `,
   });
 
@@ -2995,9 +3013,14 @@ pending_approval_requests AS (
     "ProjectionSnapshotQuery.searchThreads",
   )(function* (input) {
     const escapedQuery = escapeLikePattern(input.query);
+    const limit = input.limit ?? 50;
+    const offset = input.cursor ?? 0;
     const rows = yield* searchActiveThreadRows({
       pattern: `%${escapedQuery}%`,
-      limit: input.limit ?? 50,
+      limit: limit + 1,
+      offset,
+      scope: input.scope ?? "active",
+      projectId: input.projectId ?? null,
     }).pipe(
       Effect.mapError(
         toPersistenceSqlOrDecodeError(
@@ -3007,13 +3030,18 @@ pending_approval_requests AS (
       ),
     );
     return {
-      matches: rows.map((row) => ({
+      matches: rows.slice(0, limit).map((row) => ({
         threadId: row.threadId,
         projectId: row.projectId,
         source: row.source,
         snippet: buildSearchSnippet(row.matchText, input.query),
         messageCreatedAt: row.messageCreatedAt,
+        title: row.title,
+        projectTitle: row.projectTitle,
+        updatedAt: row.updatedAt,
+        archivedAt: row.archivedAt,
       })),
+      nextCursor: rows.length > limit ? offset + limit : null,
     };
   });
 

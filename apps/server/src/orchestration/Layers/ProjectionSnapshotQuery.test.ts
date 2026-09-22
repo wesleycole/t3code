@@ -2384,6 +2384,32 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         (yield* snapshotQuery.searchThreads({ query: "hidden needle" })).matches,
         [],
       );
+      const archived = yield* snapshotQuery.searchThreads({
+        query: "hidden needle",
+        scope: "archived",
+      });
+      assert.equal(archived.matches[0]?.threadId, ThreadId.make("thread-hidden"));
+      assert.equal(archived.matches[0]?.archivedAt, "2026-05-01T00:00:08.000Z");
+
+      const firstPage = yield* snapshotQuery.searchThreads({
+        query: "needle",
+        scope: "all",
+        limit: 1,
+      });
+      assert.equal(firstPage.matches.length, 1);
+      assert.equal(firstPage.nextCursor, 1);
+      const secondPage = yield* snapshotQuery.searchThreads({
+        query: "needle",
+        scope: "all",
+        limit: 1,
+        cursor: firstPage.nextCursor ?? 0,
+      });
+      assert.deepStrictEqual(
+        new Set([firstPage.matches[0]?.threadId, secondPage.matches[0]?.threadId]),
+        new Set([ThreadId.make("thread-active"), ThreadId.make("thread-hidden")]),
+      );
+      assert.equal(secondPage.nextCursor, null);
+
       yield* sql`
         UPDATE projection_threads
         SET deleted_at = '2026-05-01T00:00:20.000Z'
