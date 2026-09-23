@@ -29,12 +29,13 @@ function DialogBackdrop({
   className,
   variant = "default",
   ...props
-}: DialogPrimitive.Backdrop.Props & { variant?: "default" | "media" }) {
+}: DialogPrimitive.Backdrop.Props & { variant?: "default" | "media" | "workspace" }) {
   return (
     <DialogPrimitive.Backdrop
       forceRender
       className={cn(
         variant === "media" ? DIALOG_MEDIA_BACKDROP_CLASS : DIALOG_BACKDROP_CLASS,
+        variant === "workspace" && "bg-background/45 backdrop-blur-[2px]",
         className,
       )}
       data-slot="dialog-backdrop"
@@ -61,24 +62,22 @@ function DialogPopup({
   children,
   showCloseButton = true,
   bottomStickOnMobile = true,
-  backdropClassName,
-  viewportClassName,
   variant = "default",
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
   bottomStickOnMobile?: boolean;
-  backdropClassName?: string;
-  viewportClassName?: string;
-  variant?: "default" | "media";
+  variant?: "default" | "media" | "workspace";
 }) {
   return (
     <DialogPortal>
-      <DialogBackdrop className={backdropClassName} variant={variant} />
+      {/* Media opens from inside other overlays (a composer chip, a popover), so it sits above them. */}
+      <DialogBackdrop className={variant === "media" ? "z-[60]" : undefined} variant={variant} />
       <DialogViewport
         className={cn(
           bottomStickOnMobile && "max-sm:grid-rows-[1fr_auto] max-sm:p-0 max-sm:pt-12",
-          viewportClassName,
+          variant === "media" &&
+            "z-[60] grid-rows-1 place-items-center px-4 py-6 [-webkit-app-region:no-drag]",
         )}
       >
         <DialogPrimitive.Popup
@@ -86,6 +85,7 @@ function DialogPopup({
             variant === "media" ? DIALOG_MEDIA_POPUP_CLASS : DIALOG_POPUP_CLASS,
             "row-start-2 text-popover-foreground",
             variant === "default" && "max-h-full max-w-lg",
+            variant === "workspace" && "rounded-3xl shadow-2xl max-sm:rounded-2xl",
             bottomStickOnMobile && DIALOG_MOBILE_SHEET_CLASS,
             className,
           )}
@@ -142,10 +142,20 @@ function DialogFooter({
   );
 }
 
-function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+function DialogTitle({
+  className,
+  size = "default",
+  ...props
+}: DialogPrimitive.Title.Props & {
+  size?: "default" | "sm";
+}) {
   return (
     <DialogPrimitive.Title
-      className={cn("font-heading font-semibold text-xl leading-none", className)}
+      className={cn(
+        "wrap-anywhere leading-none",
+        size === "sm" ? "font-sans text-sm font-medium" : "font-heading font-semibold text-xl",
+        className,
+      )}
       data-slot="dialog-title"
       {...props}
     />
@@ -171,7 +181,7 @@ function DialogPanel({
     <ScrollArea scrollFade={scrollFade}>
       <div
         className={cn(
-          "p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-header])]:pt-1 in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer]:not(.border-t))]:pb-1",
+          "space-y-4 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-header])]:pt-1 in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer]:not(.border-t))]:pb-1",
           className,
         )}
         data-slot="dialog-panel"

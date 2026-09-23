@@ -106,7 +106,6 @@ export function EffortPresetsSettings() {
             displayed.instanceId,
             displayed.model,
           )}
-          triggerVariant="outline"
           triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
           triggerAriaLabel={label}
           {...(!selection ? { triggerLabel: "Definition default" } : {})}
@@ -131,7 +130,6 @@ export function EffortPresetsSettings() {
             modelOptions={selection.options ?? []}
             allowPromptInjectedEffort={false}
             planModeEnabled={settings.planModeEnabled}
-            triggerVariant="outline"
             triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
             onModelOptionsChange={(options) =>
               onChange(createModelSelection(selection.instanceId, selection.model, options))
@@ -357,24 +355,72 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
     ? resolveProjectSettings(target.settings, null, null, null).settings
     : null;
 
+  const workspaceRow = (
+    <SettingsRow
+      serverScoped
+      settingKeys={["defaultThreadEnvMode"]}
+      mixed={mixedWorkspace}
+      id={searchableSetting("new-threads").id}
+      title="Workspace"
+      description={
+        isProjectScope
+          ? "Where new threads in this project start."
+          : "Where new threads start. Projects and their t3.json can override it."
+      }
+      resetAction={
+        !isProjectScope && settings.defaultThreadEnvMode !== null ? (
+          <SettingResetButton
+            label="default workspace"
+            onClick={() => updateSettings({ defaultThreadEnvMode: null })}
+          />
+        ) : null
+      }
+      control={
+        <Select
+          value={mixedWorkspace ? null : (effective?.defaultThreadEnvMode ?? null)}
+          onValueChange={(value) => {
+            if (value === "local" || value === "worktree")
+              updateSettings({ defaultThreadEnvMode: value });
+          }}
+        >
+          <SelectTrigger size="sm" aria-label="Default workspace">
+            <SelectValue>
+              {(value: string | null) =>
+                value === "local" || value === "worktree"
+                  ? resolveEnvModeLabel(value)
+                  : unavailable
+                    ? "Unavailable"
+                    : "Mixed"
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            <SelectItem value="local">{resolveEnvModeLabel("local")}</SelectItem>
+            <SelectItem value="worktree">{resolveEnvModeLabel("worktree")}</SelectItem>
+          </SelectPopup>
+        </Select>
+      }
+    />
+  );
+
   return (
     <SettingsSection
       id={
-        category === "general"
+        category === "general" || category === "project"
           ? "project-defaults"
           : category === "integrations"
             ? "browser-access"
             : "source-control-defaults"
       }
       title={
-        category === "general"
+        category === "general" || category === "project"
           ? "New threads"
           : category === "integrations"
             ? "Browser"
             : "Repositories"
       }
     >
-      {category === "general" ? (
+      {category === "project" ? (
         <>
           {isProjectScope ? (
             <SettingsRow
@@ -385,6 +431,10 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
               control={<span className="text-sm text-muted-foreground">Environment setting</span>}
             />
           ) : null}
+          {workspaceRow}
+        </>
+      ) : category === "general" ? (
+        <>
           <SettingsRow
             serverScoped
             settingKeys={["defaultRuntimeMode"]}
@@ -429,7 +479,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                     const option = runtimeModeConfig[mode];
                     const Icon = option.icon;
                     return (
-                      <SelectItem key={mode} value={mode} className="min-w-64 py-2">
+                      <SelectItem key={mode} value={mode} className="min-w-64">
                         <div className="grid gap-0.5">
                           <span className="inline-flex items-center gap-1.5 font-medium">
                             <Icon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -446,51 +496,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
               </Select>
             }
           />
-          <SettingsRow
-            serverScoped
-            settingKeys={["defaultThreadEnvMode"]}
-            mixed={mixedWorkspace}
-            id={searchableSetting("new-threads").id}
-            title="Workspace"
-            description={
-              isProjectScope
-                ? "Where new threads in this project start."
-                : "Where new threads start. Projects and their t3.json can override it."
-            }
-            resetAction={
-              !isProjectScope && settings.defaultThreadEnvMode !== null ? (
-                <SettingResetButton
-                  label="default workspace"
-                  onClick={() => updateSettings({ defaultThreadEnvMode: null })}
-                />
-              ) : null
-            }
-            control={
-              <Select
-                value={mixedWorkspace ? null : (effective?.defaultThreadEnvMode ?? null)}
-                onValueChange={(value) => {
-                  if (value === "local" || value === "worktree")
-                    updateSettings({ defaultThreadEnvMode: value });
-                }}
-              >
-                <SelectTrigger size="sm" aria-label="Default workspace">
-                  <SelectValue>
-                    {(value: string | null) =>
-                      value === "local" || value === "worktree"
-                        ? resolveEnvModeLabel(value)
-                        : unavailable
-                          ? "Unavailable"
-                          : "Mixed"
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
-                  <SelectItem value="local">{resolveEnvModeLabel("local")}</SelectItem>
-                  <SelectItem value="worktree">{resolveEnvModeLabel("worktree")}</SelectItem>
-                </SelectPopup>
-              </Select>
-            }
-          />
+          {workspaceRow}
           <SettingsRow
             serverScoped
             settingKeys={["worktreeSubmodules"]}

@@ -27,7 +27,7 @@ import { sameEffortSelection } from "@t3tools/shared/effortPresets";
 import { DraftComposerAttachmentSchema } from "../lib/composer-image-schema";
 import type { DraftComposerAttachment } from "../lib/composerImages";
 import { scopedThreadKey } from "../lib/scopedEntities";
-import { resolveProviderInteractionMode } from "../features/threads/legacy-plan-mode";
+import { resolveProviderInteractionMode } from "./legacy-plan-mode";
 
 // Keep current writes until a compatible native baseline includes the v4 reader.
 const THREAD_OUTBOX_SCHEMA_VERSION = 3;

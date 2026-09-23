@@ -166,11 +166,10 @@ export function HoidDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogPopup
-        backdropClassName="bg-background/45 backdrop-blur-[2px]"
+        variant="workspace"
         bottomStickOnMobile={false}
-        className="h-[min(84dvh,52rem)] max-h-none w-[min(90vw,72rem)] max-w-none overflow-hidden rounded-3xl shadow-2xl max-sm:h-[calc(100dvh-2rem)] max-sm:w-[calc(100vw-2rem)] max-sm:rounded-2xl"
+        className="h-[min(84dvh,52rem)] max-h-none w-[min(90vw,72rem)] max-w-none overflow-hidden max-sm:h-[calc(100dvh-2rem)] max-sm:w-[calc(100vw-2rem)]"
         showCloseButton={false}
-        viewportClassName="grid-rows-[1fr_auto_1fr] p-4"
       >
         <header className="relative grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-border/70 px-3">
           <div className="justify-self-start">
@@ -190,7 +189,7 @@ export function HoidDialog() {
           </div>
           <div className="flex items-center gap-2">
             <SparklesIcon className="size-4 text-muted-foreground" />
-            <DialogTitle className="font-sans text-sm font-medium">Hoid</DialogTitle>
+            <DialogTitle size="sm">Hoid</DialogTitle>
           </div>
           <div className="flex items-center justify-self-end">
             <Tooltip>
@@ -239,9 +238,11 @@ export function HoidDialog() {
               <h2 className="text-balance text-3xl font-semibold tracking-tight">
                 Ask across your work
               </h2>
-              <DialogDescription className="mx-auto mt-3 max-w-xl text-pretty leading-6">
-                Search and read conversations on this environment, including archived work. Hoid
-                retrieves sources before answering and links back to the conversations it used.
+              <DialogDescription className="mx-auto mt-3 max-w-xl">
+                <span className="text-pretty leading-6">
+                  Search and read conversations on this environment, including archived work. Hoid
+                  retrieves sources before answering and links back to the conversations it used.
+                </span>
               </DialogDescription>
             </div>
 
@@ -269,7 +270,6 @@ export function HoidDialog() {
             >
               <Textarea
                 aria-label="Ask Hoid"
-                className="border-0 bg-transparent shadow-none before:shadow-none has-focus-visible:border-0 has-focus-visible:ring-0"
                 disabled={starting || !canStart}
                 onChange={(event) => setPrompt(event.target.value)}
                 placeholder="Ask about a decision, an archived conversation, or ongoing work…"

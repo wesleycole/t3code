@@ -11,7 +11,7 @@ import { getProviderOptionCurrentLabel, getProviderOptionDescriptors } from "@t3
 import { GaugeIcon, LockKeyholeIcon } from "lucide-react";
 import type { PointerEvent } from "react";
 
-import { Button } from "../ui/button";
+import { ComposerControl } from "./ComposerControl";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useComposerMenuProps } from "./composerEventScope";
@@ -74,7 +74,7 @@ export function EffortDial({
               : lockedSelection.model}
           </span>
         </TooltipTrigger>
-        <TooltipPopup className="max-w-sm space-y-2">
+        <TooltipPopup className="max-w-sm">
           <p>Fixed for this conversation. Start a new conversation to change effort.</p>
           {specialistSummary}
         </TooltipPopup>
@@ -114,7 +114,7 @@ export function EffortDial({
   return (
     <Popover open={open && !disabled} onOpenChange={onOpenChange}>
       <PopoverTrigger
-        render={<Button variant="ghost" size="sm" disabled={disabled} />}
+        render={<ComposerControl size="sm" disabled={disabled} />}
         aria-label={`Effort: ${EFFORT_PRESET_LABELS[preset]}`}
         data-chat-provider-model-picker="true"
         className="w-24 min-w-24 shrink-0 justify-center gap-1.5 [&_svg]:mx-0"
@@ -126,8 +126,9 @@ export function EffortDial({
         {...composerFloatingLayerProps}
         side="top"
         align="start"
-        className="w-[560px] max-w-[calc(100vw-2rem)] bg-popover!"
-        viewportClassName="p-3"
+        className="w-[560px] max-w-[calc(100vw-2rem)]"
+        variant="solid"
+        padding="comfortable"
       >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1">
           <span className="text-sm font-medium">Conversation effort</span>
@@ -260,16 +261,15 @@ export function EffortDial({
         </div>
         <div className="mt-3 grid grid-cols-4 gap-1" role="group" aria-label="Effort presets">
           {EFFORT_PRESETS.map((level) => (
-            <Button
+            <ComposerControl
               key={level}
               size="sm"
-              variant={level === preset ? "secondary" : "ghost"}
               aria-pressed={level === preset}
               onClick={() => onChange(level)}
-              className={cn("px-1", level === preset && "text-primary")}
+              className="px-1 aria-pressed:bg-secondary aria-pressed:text-primary aria-pressed:hover:bg-secondary/90"
             >
               {EFFORT_PRESET_LABELS[level]}
-            </Button>
+            </ComposerControl>
           ))}
         </div>
         <div className="mt-3 border-t px-1 pt-3" aria-live="polite">
